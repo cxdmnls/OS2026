@@ -1,0 +1,4 @@
+/code/obj/
+/code/bin/
+/code/.gdb.in
+/code/.qemu.out
