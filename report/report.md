@@ -309,7 +309,7 @@ void cons_putc(int c);
 void sbi_console_putchar(unsigned char ch);
 uint64_t sbi_call(uint64_t sbi_type, uint64_t arg0,
                   uint64_t arg1, uint64_t arg2);
-``
+```
 
 ## 五、测试与验证
 
