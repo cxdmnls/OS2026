@@ -1,5 +1,6 @@
 #include <default_pmm.h>
 #include <best_fit_pmm.h>
+#include <buddy_system_pmm.h>
 #include <defs.h>
 #include <error.h>
 #include <memlayout.h>
@@ -13,9 +14,9 @@
 
 // virtual address of physical page array
 struct Page *pages;
-// Absolute physical page number of the managed memory's exclusive upper bound.
+// amount of physical memory (in pages)
 size_t npage = 0;
-// Kernel virtual address minus physical address (the fixed boot mapping).
+// the kernel image is mapped at VA=KERNBASE and PA=info.base
 uint64_t va_pa_offset;
 // memory starts at 0x80000000 in RISC-V
 // DRAM_BASE defined in riscv.h as 0x80000000
@@ -34,7 +35,9 @@ static void check_alloc_page(void);
 
 // init_pmm_manager - initialize a pmm_manager instance
 static void init_pmm_manager(void) {
-#ifdef PMM_BEST_FIT
+#ifdef PMM_BUDDY
+    pmm_manager = &buddy_system_pmm_manager;
+#elif defined(PMM_BEST_FIT)
     pmm_manager = &best_fit_pmm_manager;
 #else
     pmm_manager = &default_pmm_manager;

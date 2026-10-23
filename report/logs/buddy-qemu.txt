@@ -1,0 +1,20 @@
+Buddy System QEMU verification
+
+Command:
+    make check-buddy
+
+Serial output excerpt:
+    memory management: buddy_system_pmm_manager
+    [Buddy] init_memmap: PASS
+    [Buddy] split: PASS
+    [Buddy] coalesce: PASS
+    [Buddy] non-power-of-two request: PASS
+    [Buddy] insufficient memory: PASS
+    check_alloc_page() succeeded!
+
+Result:
+    Buddy System integration check: PASS
+
+Regression:
+    make PMM=first_fit completes RISC-V compilation and QEMU reports
+    "check_alloc_page() succeeded!".

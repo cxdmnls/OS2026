@@ -1,11 +1,13 @@
 PROJ	:= lab2
-# Staged group work: the supplied Best-Fit module is still a skeleton.
-# After implementing it, use `make clean` then `make PMM=best_fit`.
+# Select the physical page allocator at build time.  Run `make clean` after
+# changing PMM because objects do not encode this option in their names.
 PMM ?= first_fit
-ifeq ($(PMM),best_fit)
+ifeq ($(PMM),buddy)
+DEFS += -DPMM_BUDDY
+else ifeq ($(PMM),best_fit)
 DEFS += -DPMM_BEST_FIT
 else ifneq ($(PMM),first_fit)
-$(error Unsupported PMM=$(PMM); use first_fit or best_fit)
+$(error Unsupported PMM=$(PMM); use first_fit, best_fit, or buddy)
 endif
 EMPTY	:=
 SPACE	:= $(EMPTY) $(EMPTY)
@@ -119,7 +121,11 @@ KCFLAGS		+= $(addprefix -I,$(KINCLUDE))
 
 KFILES := $(call listf_cc,$(KSRCDIR))
 ifeq ($(PMM),first_fit)
+KFILES := $(filter-out kern/mm/best_fit_pmm.c kern/mm/buddy_system_pmm.c,$(KFILES))
+else ifeq ($(PMM),buddy)
 KFILES := $(filter-out kern/mm/best_fit_pmm.c,$(KFILES))
+else ifeq ($(PMM),best_fit)
+KFILES := $(filter-out kern/mm/buddy_system_pmm.c,$(KFILES))
 endif
 
 ifeq ($(MAKECMDGOALS),test)
@@ -172,7 +178,7 @@ endif
 TARGETS: $(TARGETS)
 
 .DEFAULT_GOAL := TARGETS
-.PHONY: qemu spike test
+.PHONY: qemu spike test check-buddy
 qemu: $(UCOREIMG) $(SWAPIMG) $(SFSIMG)
 	$(V)$(QEMU) \
 		-machine virt \
@@ -202,6 +208,9 @@ test: $(UCOREIMG) $(SWAPIMG) $(SFSIMG)
 		-device loader,file=$(UCOREIMG),addr=0x80200000
 spike: $(UCOREIMG) $(SWAPIMG) $(SFSIMG)
 	$(V)$(SPIKE) $(UCOREIMG)
+
+check-buddy:
+	$(V)$(SH) tools/check_buddy.sh
 
 .PHONY: grade touch
 
