@@ -20,7 +20,7 @@ GCCPREFIX := riscv64-unknown-elf-
 #endif
 
 ifndef QEMU
-QEMU := $(or $(wildcard /opt/qemu-4.1.1/bin/qemu-system-riscv64),qemu-system-riscv64)
+QEMU := qemu-system-riscv64
 endif
 
 ifndef SPIKE
@@ -211,6 +211,13 @@ spike: $(UCOREIMG) $(SWAPIMG) $(SFSIMG)
 
 check-buddy:
 	$(V)$(SH) tools/check_buddy.sh
+
+.PHONY: check-extensions trace-mmu
+check-extensions:
+	$(V)python3 tools/verify_extensions.py
+
+trace-mmu: $(UCOREIMG)
+	$(V)python3 tools/trace_mmu.py
 
 .PHONY: grade touch
 

@@ -16,6 +16,8 @@
 | 2411834-张岩 | Buddy System 分配算法、构建接入与测试 |
 | 2413404-邓耀飞 | First-Fit 分析、Best-Fit 连续物理内存分配算法与验证 |
 
+本轮由常侯鑫通过 Codex 补充 SLUB、QEMU MMU 双 GDB 调试、复核测试和报告。三人仍需各自复现流程并共同核对报告；各成员负责自己的模块说明，最终共同审阅。
+
 ## 一、实验目的
 
 本实验围绕物理内存的发现、初始化和分配展开，主要目标如下：
@@ -32,15 +34,27 @@
 
 | 项目 | 实际使用情况 |
 |---|---|
-| 宿主环境 | Windows 11 + WSL2 |
+| 宿主环境 | Windows + WSL Ubuntu 24.04，用户 lenovo |
 | 目标架构 | RISC-V 64 位 |
 | 模拟器 | QEMU 4.1.1，`virt` 机器 |
 | 固件 | QEMU 自带 OpenSBI v0.4 |
-| 交叉编译器 | `riscv64-unknown-elf-gcc` 14.2.0 |
-| 构建工具 | GNU Make 4.4.1 |
+| 交叉编译器 | SiFive GCC-Metal 10.2.0-2020.12.8，`riscv64-unknown-elf-gcc` 10.2.0 |
+| 构建工具 | GNU Make 4.3 |
+| 内核调试器 | 工具链中的 `riscv64-unknown-elf-gdb` |
+| 宿主调试器 | 原生 x86-64 GDB 15.1，本轮通过 apt 安装 |
 | 运行内核 | `code/bin/ucore.img` |
 
 编译、链接和 QEMU 验证均在 WSL 中完成。测试使用真实内核启动路径，没有用宿主程序模拟替代内核内分配器。
+
+### AI 工具使用情况
+
+| 成员 | AI 编程工具 | 底层模型 | 备注 |
+|------|------------|---------|------|
+| 2413603-常侯鑫 | Codex | GPT-6.1 sol | 初始化、SLUB、页表调试及集成验证 |
+| 2411834-张岩 | Codex | DeepSeek-V4.1-Flash | Buddy System 实现与测试 |
+| 2413404-邓耀飞 | Codex | GPT-6.1 sol | First-Fit 分析与 Best-Fit 实现 |
+
+工具和模型名称按成员确认的信息沿用 Lab1；备注描述本实验协作范围。
 
 ### 2.1 构建配置
 
@@ -48,10 +62,21 @@ Makefile 的默认 `PMM` 改为 `best_fit`；`pmm.c` 已有 `PMM_BEST_FIT` 条�
 三种分配器通过统一接口接入。
 切换 `PMM` 前必须 `make clean`，因为目标文件名不包含该选项。
 
-本次 WSL 中从官方源码编译安装 QEMU 4.1.1 到 `/opt/qemu-4.1.1`，启用
-`--enable-debug --disable-werror`，保留系统 QEMU 10.2.1。
-Makefile 优先采用上述 4.1.1 路径，无此路径则回退到 PATH 中的 QEMU，亦可通过
-命令行 QEMU=... 覆盖。官方源码未作兼容性补丁，安装后的可执行文件保留调试信息。
+本机复用 Lab1 的隔离环境：工具链位于 `/home/lenovo/oslab/opt/riscv-toolchain`，
+日常运行的 QEMU 为 `/home/lenovo/oslab/opt/qemu-4.1.1/bin/qemu-system-riscv64`。
+源码位于 `/home/lenovo/oslab/src/qemu-4.1.1`；双 GDB 使用已有、未剥离调试符号的
+`/home/lenovo/oslab/build/qemu-4.1.1/riscv64-softmmu/qemu-system-riscv64`。
+本轮没有重新覆盖系统或编译原理课程的 QEMU，也没有修改全局 PATH 或 bashrc。
+Makefile 使用环境中的 `QEMU`，未设置时从 PATH 查找，不再优先选择队友机器的 `/opt` 路径。
+
+在 WSL 的当前终端激活：
+
+```bash
+source /mnt/e/Develop/Pycharm/PycharmData/OS/environment/oslab-env.sh
+cd /mnt/e/Develop/Pycharm/PycharmData/OS/OS2026/code
+qemu-system-riscv64 --version
+riscv64-unknown-elf-gcc --version
+```
 
 在 `code` 目录中执行默认配置的构建与评分：
 
@@ -106,7 +131,7 @@ pmm_manager->check() 验证分配器状态
 5. 先将所有描述符标记为保留，避免固件、内核和描述符数组自身进入分配器。
 6. 计算 `free_begin`，只把描述符数组之后的完整页面注册为初始空闲内存。
 
-当前 128 MiB 配置下，实测关键输出为：
+加入 SLUB 与 MMU 探针前，128 MiB 配置下的历史实测输出为（对应已有 integration 日志）：
 
 ```text
 page descriptors: [0x0000000080207000, 0x0000000080347000)
@@ -437,7 +462,7 @@ Total Score: 20/20
 
 日志保存在 `logs/best-fit-grade.txt`。框架的 Best-Fit 附加测试本身只检查管理器
 是否接入，具体选块语义由原始内置测试和上述新增行为断言共同验证。
-该评分不代表 QEMU MMU 源码分支调试或 SLUB 已完成。
+该评分仅覆盖初始化和 Best-Fit；本轮新增的 SLUB、MMU 验证见第十二、十三节及对应日志。
 
 First-Fit、Buddy 和 Best-Fit 均已分别清理、编译并用 QEMU 4.1.1 启动，输出
 `check_alloc_page() succeeded!`，未出现 panic；完整日志分别为
@@ -512,7 +537,7 @@ Page 描述符和空闲链表属于软件的物理页资源管理；PTE、satp �
 地址转换及权限检查，两者职责不同。分配器返回 Page 描述符，不会自动建立页表映射。
 First-Fit / Best-Fit 讨论的是连续块选择与外部碎片；Buddy 的二次幂取整还引入
 内部碎片。本实验使用 4 KiB 页与单执行流初始化，尚未实现进程独立地址空间、
-缺页按需分配、页面置换、写时复制、并发同步或完整的对象分配器。
+缺页按需分配、页面置换、写时复制、并发同步或 Linux 完整 SLUB 的 per-CPU 等优化。
 
 ## 十一、实验总结
 
@@ -520,4 +545,276 @@ First-Fit / Best-Fit 讨论的是连续块选择与外部碎片；Buddy 的二�
 
 First-Fit 按地址寻找首个适配块，结构简单；Best-Fit 搜索最小适配块，减少单次分配的剩余空间，但可能形成小碎片；Buddy 依靠自然对齐、阶链表和伙伴关系快速分裂与合并，同时承担二次幂取整的内部碎片。三种算法都需要维护块头标志、链表和空闲页计数，并在分配失败时保持状态不变。
 
-First-Fit、Best-Fit 与 Buddy 均通过 QEMU 4.1.1 内核启动回归，Best-Fit 框架评分为 20/20。原始测试与新增确定性测试共同覆盖了选块、分裂、合并、耗尽、碎片化失败和全局状态恢复。以上结果验证了物理页管理部分；页面置换、SLUB 和 QEMU MMU 源码调试不在这些测试结果的证明范围内。
+First-Fit、Best-Fit 与 Buddy 均通过 QEMU 4.1.1 内核启动回归，Best-Fit 框架评分为 20/20。原始测试与新增确定性测试共同覆盖了选块、分裂、合并、耗尽、碎片化失败和全局状态恢复。物理页管理的测试不等于对象分配或 MMU 调试；本轮对 SLUB 和 MMU 另外实现、验证并记录如下。
+
+## 十二、Challenge：SLUB 风格的内存对象分配
+
+### 12.1 功能、接口与规格
+
+负责人：2413603-常侯鑫（本轮补充）。实现位于 `kern/mm/slub.c`，接口位于 `slub.h`，独立测试位于 `slub_test.c`。
+
+```c
+void slub_init(void);
+void *kmalloc(size_t size);
+void kfree(void *ptr);
+void slub_check(void);
+```
+
+前置条件是 `pmm_init()` 已完成。`slub_init()` 只初始化一次，随后 `kmalloc()` 返回至少具有请求长度、16 字节对齐且不与存活对象重叠的空间；零长度和无法满足的请求返回 NULL，`kfree(NULL)` 无操作。调用者必须释放原始分配地址一次，不能传入内部指针或重复释放。本实现用断言检查部分误用，没有承诺能安全处理任意非法指针。
+
+本实验允许简化 SLUB，故实现两层分配结构：
+
+```text
+kmalloc / kfree
+    ↓
+16、32、64、128、256、512、1024、2048 字节大小类缓存
+    ↓
+一页一个 slab：页头元数据 + 对象区 + 位图分配状态
+    ↓
+alloc_pages / free_pages → 当前 First-Fit / Best-Fit / Buddy
+```
+
+大于 2048 字节的请求通过底层连续页分配，页首保留头部，再返回对象区首地址。
+页头记录的是向 PMM 请求的原始页数，释放时传回相同页数；这样也符合 Buddy
+“内部向上取整、释放仍传原始请求数”的接口约定，不会错误归还一部分伙伴块。
+加法和向上取整之前先检查请求上界，避免超大输入溢出。
+
+### 12.2 核心实现顺序
+
+`kmalloc()` 先选大小类，遍历该类已有 slab 找未满的页；没有空位时申请新页。
+对象区从页头之后按 16 字节对齐开始，位图中每一位对应一个槽位。分配时置位并
+增加 inuse，释放时检查槽位边界、清位并减少 inuse。最后一个对象释放时，将 slab
+从缓存链表移除并归还底层物理页。大对象直接归还记录的连续页。
+
+此实现体现大小类、slab 内对象复用和底层页回收；采用位图而非 Linux SLUB 的
+对象内 freelist，不实现 per-CPU slab、NUMA 或并发锁，是教学用简化对象分配器。
+按大小类遍历和扫描位图的成本高于 Linux 的优化实现，实验不要求复杂度上界。
+
+### 12.3 独立测试与依据
+
+实现提示词和测试提示词分别见 [prompt.md](prompt.md) 的 SLUB 两节。
+`slub_test.c` 只通过公开接口测试，不依赖内部位图的具体布局：
+
+| 测试 | 验证内容 |
+|---|---|
+| 0、NULL、最大 size_t | 约定行为与溢出保护，失败不改变页数 |
+| 1～8192 字节的 28 个边界请求 | 覆盖大小类前后、大对象路径、16 字节对齐 |
+| 同时写入并校验不同字节模式 | 存活对象不重叠，容量足够，数据不串扰 |
+| 300 个 16 字节对象 | 强制跨越多个 slab，检查全部对象内容 |
+| 释放一个槽位后再次分配 | 缓存中剩余空间可复用 |
+| 交错释放、反向释放 | 不同释放顺序后能归还所有物理页 |
+| 有效但超过可用页的请求 | 真正内存不足时返回 NULL，不损坏状态 |
+
+在 First-Fit、Buddy、Best-Fit 三种 PMM 上均实际输出：
+
+```text
+[SLUB] zero/null/oversized: PASS
+[SLUB] size boundaries/alignment/nonoverlap/data: PASS
+[SLUB] multi-slab/reuse/page-reclaim: PASS
+[SLUB] out-of-memory/state-recovery: PASS
+[SLUB] all checks: PASS
+```
+
+日志为 `logs/first_fit-extensions.txt`、`logs/buddy-extensions.txt`、
+`logs/best_fit-extensions.txt`。当前 `kern_init()` 在 `pmm_init()` 后调用
+`slub_init()` 和 `slub_check()`，验证完毕后进入 MMU 探针，最后保持原有无限循环。
+
+## 十三、分支任务：双 GDB 调试 QEMU 的 MMU 与 TLB
+
+### 13.1 两个调试层次和复现方法
+
+本轮核对指导书的“分支任务：gdb 调试页表查询过程”，完成其要求的源码路径、
+真实访存翻译、单步查表、TLB 位置、分页前后比较以及问题记录。
+
+宿主原生 GDB 调试 x86-64 的 QEMU 程序；RISC-V GDB 调试 QEMU 内的 RISC-V
+内核。两个 PC 和地址空间不同，不能用 RISC-V GDB 去调试宿主的机器指令。
+本机已有带符号的 QEMU 构建，无需重新编译安装；本轮只补装缺少的原生 GDB。
+原生 GDB 从启动时托管 QEMU，相当于指导书的附加调试方式，不需要修改 ptrace
+策略，也不需要以 root 身份运行调试器。
+
+激活 OS 环境，在 `code/` 执行：
+
+```bash
+make clean
+make -j4 PMM=best_fit
+make trace-mmu
+```
+
+`trace_mmu.py` 动态选择空闲端口，从 ELF 符号读取探针地址，启动原生 GDB
+运行 `mmu_host_gdb.py`，再启动 RISC-V GDB 连接该 QEMU。它实际执行两次 `si`，
+并保存两个调试器与串口的原始输出。调试结束只终止脚本自己创建的进程组。
+若调试版 QEMU 在其他位置，可设置 `MMU_QEMU`，其源码路径须仍可被 GDB 找到。
+
+三终端手动演示时，终端一以 `make QEMU=调试版路径 debug` 启动，终端二原生
+GDB 附加对应 QEMU 并设置条件断点、执行 continue，终端三 `make gdb` 调试内核。
+外层 GDB 暂停 QEMU 时，内层会等待；必须先继续外层，内层才能完成指令。
+
+### 13.2 被调试的访存指令
+
+`mmu_probe.c` 放置独立、4 KiB 对齐的数据页，初始化为 `0x123456789abcdef0`。
+探针先执行 `sfence.vma`，再执行两次访问同一地址的 `ld`。它不改变页表映射，
+刷新仅用于可重复地观察第一次未命中和第二次命中。
+
+本机 Best-Fit 构建的客体 GDB 日志记录：
+
+```text
+satp = 0x8000000000080206
+0xffffffffc020136a: ld a5,0(a1)
+0xffffffffc020136c: ld a3,0(a1)
+LOAD_RESULTS first=0x123456789abcdef0 second=0x123456789abcdef0
+TWO_LOADS_COMPLETED pc=0xffffffffc020136e
+```
+
+本次访问的 VA 为 `0xffffffffc0208000`。地址随镜像布局可能变化，所以脚本
+从符号表计算地址和目标寄存器，不要求以后构建仍使用这些数值。
+
+### 13.3 真实调用路径与关键分支
+
+第一次数据读取在外层 GDB 中捕获的路径为：
+
+```text
+TCG 生成的客体访存代码
+  → helper_le_ldq_mmu / load_helper           accel/tcg/cputlb.c
+  → tlb_fill
+  → riscv_cpu_tlb_fill                      target/riscv/cpu_helper.c
+  → get_physical_address
+  → tlb_set_page / tlb_set_page_with_attrs   accel/tcg/cputlb.c
+  → 带 addend 的宿主 RAM 访问
+```
+
+`load_helper()` 使用 `tlb_index()` 按地址和 mmu_idx 定位软件 TLB 表项，取
+`addr_read`（取指则取 addr_code）。`if (!tlb_hit(tlb_addr, addr))` 是主表
+未命中的分支，随后检查 victim TLB；仍未命中才调用架构相关的 `tlb_fill()`。
+普通命中的快路径可能由 TCG 直接生成宿主代码，不一定每次进入这个 C helper。
+因此不能把“没有命中 C 断点”直接解释成“没有访存”。
+
+`get_physical_address()` 的关键步骤与本次单步观察如下：
+
+| 步骤 | 本次实测及意义 |
+|---|---|
+| 特权级检查 | mmu_idx=1，为 S 模式；未走 M 模式直接返回分支 |
+| 解析 satp | MODE=8，即 Sv39；根表 PA=`0x80206000` |
+| 地址合法性 | 检查 Sv39 高位符号扩展是否有效 |
+| 设置循环 | levels=3，ptidxbits=9，ptesize=8，ptshift=18 |
+| 计算顶层索引 | idx=`0x1ff`（511） |
+| 读取页表项 | pte_addr=`0x80206ff8`，通过 ldq_phys 读得 pte=`0x200000cf` |
+| 判断 V / RWX | V=1 且 RWX 非零，为叶子项，不是下一层表指针 |
+| 权限与对齐 | 检查 U/S、R/W/X、超级页 PPN 对齐；均通过 |
+| A/D 位 | 当前项已设置，无需本次更新 |
+| 拼接超级页地址 | 返回物理页基址 `0x80208000`，本次页内偏移为零 |
+| 回填软件 TLB | prot=7，mmu_idx=1，以 4096 字节表项回填 |
+
+通常三级页表循环按 VPN[2]、VPN[1]、VPN[0] 逐级读取，只有 V 有效且 RWX
+全零时才将 `ppn << 12` 作为下一层页表基址。**当前启动表的顶层就是 1 GiB
+大页叶子，因此本次 i=0 就完成翻译，没有实际走三层。** 初始 PTE 中
+PPN=`0x80000`，低级 VPN 位参与拼接，最终得到实际 PA，而非只用 PPN 左移。
+
+### 13.4 TLB 实测与真实硬件的区别
+
+回填后读取 QEMU 的真实 CPUTLBEntry，得到：
+
+```text
+TLB_INDEX=0x8
+READ_TAG=0xffffffffc0208000
+ADDEND=0x80001fe00000
+HOST_DATA_VALUE=0x123456789abcdef0
+```
+
+ADDEND 是本轮宿主进程映射相关的值，每次运行可能不同。QEMU 快路径将客体
+VA 加 addend（按宿主指针宽度计算）得到宿主 RAM 指针，不能把该 addend 当成
+内核的 VA/PA 固定偏移。两个 `ld` 都读到正确数据，但只触发一次目标数据的慢
+helper 和一次 CPU 页表遍历；第二次读取利用了已填入的软件 TLB。
+
+另外在复位取指 `0x1000` 捕获到真实 CPU 路径：
+
+```text
+get_page_addr_code → tlb_fill → riscv_cpu_tlb_fill
+  → get_physical_address (MMU_INST_FETCH, mmu_idx=3)
+BARE_PHYSICAL=0x1000
+tlb_set_page_with_attrs(vaddr=0x1000, paddr=0x1000, size=4096)
+```
+
+此时 M 模式直接使用物理地址，没有 Sv39 查表，但 QEMU 仍回填软件 TLB。
+真实 RISC-V 的 TLB 是硬件地址翻译缓存；QEMU 的软件 TLB 还承担客体地址到
+宿主内存/设备区域的加速，以及访问类型、权限、MMIO 等处理。二者不能简单
+按缓存容量、层次、命中时延一一对应，更不能认为 Bare 模式没有任何 QEMU
+软件 TLB 行为。这里对比的是复位取指和 S 模式数据读取，访问类型不同，不能
+拿它们比较性能；它们足以说明有无页表遍历与软件 TLB 并非同一件事。
+
+### 13.5 本轮实际调试问题与 AI 协作
+
+1. 最初只按 addr=0x1000 设置断点，捕获到的是客体 GDB 读取内存触发的
+   `riscv_cpu_get_phys_page_debug()`。这不是 CPU 执行访存。根据 backtrace
+   发现后，限定 MMU_INST_FETCH 和 M 模式，取得了真正的 CPU 路径；对重复
+   数据遍历的观察还校验调用者是 `riscv_cpu_tlb_fill()`。
+2. Python GDB 观察断点最初只设置 condition，stop 回调却记录了其他地址的
+   事件，造成大量输出。改为在 stop() 内明确检查地址和调用者后，观察恢复为
+   目标页的单次慢路径。它是调试脚本问题，不是内核页表错误。
+3. GDB 优先显示包含函数的符号名，完成两次单步后不一定打印
+   `mmu_probe_done`。脚本改用 ELF 中的实际标签地址与 PC 比较，避免把显示
+   形式当作行为证据；目标寄存器也从反汇编提取。
+4. 已有 QEMU 优化构建会出现 `<optimized out>`，脚本只记录可见局部变量。
+   单步时行号可能跳到内联函数或其他返回语句，不能据此断定走了错误分支。
+   以可见变量、返回地址、调用栈和最终结果共同核对。
+5. 设置 `handle SIGPIPE nostop noprint pass`，避免调试连接的管道信号打断观察。
+   本次没有故意关闭该配置制造失败，不将指导书示例误写成实测 Bug。
+
+对应复核提示词、调试规格见 [prompt.md](prompt.md)。原始证据为
+`logs/mmu-host-gdb.txt`、`logs/mmu-guest-gdb.txt`、`logs/mmu-serial.txt`。
+日志仅规范化换行和行尾空白，保留观察到的文本内容。
+
+## 十四、规格、提示词与交付检查
+
+### 14.1 各模块的规格与提示词组织
+
+| 模块 | 输入与输出约定 / 关键不变式 | 本轮复核方式 |
+|---|---|---|
+| page_init | 无参数；正确设置 offset、npage、pages；已占用区保持 reserved，注册完整空闲页 | 原框架测试、描述符检查和非法范围测试 |
+| First-Fit | n>0；返回首个足够大连续块或 NULL；失败状态不变，释放可合并 | 原有 check 和三 PMM 集成日志 |
+| Best-Fit | 返回最小适配块；支持拆分和双侧合并；保持原有两个测试函数体 | 框架 grade 与独立行为断言 |
+| Buddy 实现 | 向上取整到二次幂，块自然对齐，释放使用原请求 n，计数与链表一致 | 分裂/合并/3 页请求/33 页失败/状态恢复 |
+| Buddy 测试 | 从真实全局管理器隔离 32 页，完成测试后恢复全部状态 | `make check-buddy` |
+| SLUB 实现 | 任意正长度，16 字节对齐，不重叠，失败无状态破坏；空 slab 归还页 | 三 PMM 上真实内核执行 |
+| SLUB 测试 | 边界、同时存活内容、多 slab、复用、OOM、页回收 | 独立 `slub_test.c` |
+| MMU | 真实 CPU 访存证据；区分 GDB 读内存和 CPU 请求；动态符号地址 | 两个真实 GDB 与 CPUTLBEntry 检查 |
+
+最终规格和提示词集中在 [prompt.md](prompt.md)。仓库原先只保存了分工提示，
+队友历史完整会话不在本地，不能补造其逐字记录。现有实现相关的提示词明确
+标注为本轮整理并用于复核的版本，和新 SLUB/调试工作的规格分开说明。
+
+### 14.2 扩展思考：不知道硬件内存范围怎么办
+
+可遵循固件或启动协议获取信息：本实验使用传入的设备树，解析 memory 节点
+的 reg；其他平台可以使用 UEFI 内存映射或启动器提供的内存地图。真实系统还
+需要读取保留区、多个不连续内存区和设备 MMIO，不能简单对未知地址试写。
+当前实现按框架约束接收 DRAM_BASE，并只管理到 PHYSICAL_MEMORY_END，尚未
+实现通用的多内存区及 reserved-memory 处理。
+
+### 14.3 截图与最终运行
+
+按成员安排，测试截图由后续阅读代码、手动复现时采集，本轮保留 `images/`
+目录并保存实际日志，不生成伪造截图。建议截取 Best-Fit grade、Buddy 检查、
+SLUB 三 PMM 验证和双 GDB 的关键查表输出。
+
+```bash
+make check-extensions
+make check-buddy
+make clean
+make -j4 PMM=best_fit
+make trace-mmu
+make PMM=best_fit grade
+```
+
+集成验证会实际编译三种 PMM，最终保留 Best-Fit；grade 会清理当前构建，之后
+查看源码和单步调试前可再次执行 `make -j4 PMM=best_fit`。本轮新增代码后
+镜像增大，Best-Fit 当前描述符区为 `[0x80209000,0x80349000)`，空闲页数为
+31927；不能把之前 31929 页的历史日志当成镜像布局必须固定的断言。
+
+### 14.4 指导书来源
+
+- [练习与 SLUB Challenge](http://oslab.mobisys.top/lab2026/_book/lab2/lab2_2_1_exercise.html)
+- [QEMU 页表查询调试任务](http://oslab.mobisys.top/lab2026/_book/lab2/lab2_4_qemu_mmu_debug.html)
+- [实验报告要求](http://oslab.mobisys.top/lab2026/_book/lab2/lab2_5_labs_requirement.html)
+
+本轮已实际重新获取上述页面正文进行核对；SLUB 是选做 Challenge，本组按此次
+补充需求完成。截图按本组安排暂缓，历史原始提示词记录的可用范围见 prompt.md。

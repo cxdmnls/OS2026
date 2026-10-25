@@ -1,0 +1,167 @@
+Temporary breakpoint 1 at 0x34b070: file /home/lenovo/oslab/src/qemu-4.1.1/target/riscv/cpu_helper.c, line 158.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+[Switching to Thread 0x7ffff50e36c0 (LWP 424)]
+
+Thread 3 "qemu-system-ris" hit Temporary breakpoint 1, get_physical_address (env=env@entry=0x5555560eccd0, physical=physical@entry=0x7ffff50e2870, prot=prot@entry=0x7ffff50e286c, addr=addr@entry=4096, access_type=access_type@entry=2, mmu_idx=mmu_idx@entry=3) at /home/lenovo/oslab/src/qemu-4.1.1/target/riscv/cpu_helper.c:158
+158	{
+=== BARE RESET TRANSLATION ===
+env = 0x5555560eccd0
+physical = 0x7ffff50e2870
+prot = 0x7ffff50e286c
+addr = 4096
+access_type = 2
+mmu_idx = 3
+#0  get_physical_address (env=env@entry=0x5555560eccd0, physical=physical@entry=0x7ffff50e2870, prot=prot@entry=0x7ffff50e286c, addr=addr@entry=4096, access_type=access_type@entry=2, mmu_idx=mmu_idx@entry=3) at /home/lenovo/oslab/src/qemu-4.1.1/target/riscv/cpu_helper.c:158
+#1  0x000055555589f8f0 in riscv_cpu_tlb_fill (cs=0x5555560e42c0, address=4096, size=0, access_type=MMU_INST_FETCH, mmu_idx=3, probe=false, retaddr=0) at /home/lenovo/oslab/src/qemu-4.1.1/target/riscv/cpu_helper.c:451
+#2  0x000055555582119f in tlb_fill (cpu=cpu@entry=0x5555560e42c0, addr=addr@entry=4096, size=size@entry=0, access_type=access_type@entry=MMU_INST_FETCH, mmu_idx=mmu_idx@entry=3, retaddr=retaddr@entry=0) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c:878
+#3  0x0000555555824845 in get_page_addr_code (env=0x5555560eccd0, addr=addr@entry=4096) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c:1032
+#4  0x000055555583f478 in tb_htable_lookup (cpu=cpu@entry=0x5555560e42c0, pc=pc@entry=4096, cs_base=cs_base@entry=0, flags=flags@entry=3, cf_mask=4278714368) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cpu-exec.c:339
+#5  0x000055555583fce1 in tb_lookup__cpu_state (cf_mask=<optimized out>, flags=<synthetic pointer>, cs_base=<synthetic pointer>, pc=<synthetic pointer>, cpu=0x5555560e42c0) at /home/lenovo/oslab/src/qemu-4.1.1/include/exec/tb-lookup.h:43
+0x000055555589f8f0 in riscv_cpu_tlb_fill (cs=0x5555560e42c0, address=4096, size=0, access_type=MMU_INST_FETCH, mmu_idx=3, probe=false, retaddr=0) at /home/lenovo/oslab/src/qemu-4.1.1/target/riscv/cpu_helper.c:451
+451	    ret = get_physical_address(env, &pa, &prot, address, access_type, mmu_idx);
+Value returned is $1 = 0
+BARE_PHYSICAL=0x1000
+Temporary breakpoint 2 at 0x555555824110: file /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c, line 700.
+
+Thread 3 "qemu-system-ris" hit Temporary breakpoint 2, tlb_set_page_with_attrs (cpu=cpu@entry=0x5555560e42c0, vaddr=vaddr@entry=4096, paddr=4096, attrs=attrs@entry=..., prot=7, mmu_idx=mmu_idx@entry=3, size=4096) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c:700
+700	{
+=== BARE SOFTWARE TLB FILL (NO PAGE WALK) ===
+cpu = 0x5555560e42c0
+vaddr = 4096
+paddr = 4096
+attrs = {unspecified = 1, secure = 0, user = 0, requester_id = 0, target_tlb_bit0 = 0, target_tlb_bit1 = 0, target_tlb_bit2 = 0}
+prot = 7
+mmu_idx = 3
+size = 4096
+#0  tlb_set_page_with_attrs (cpu=cpu@entry=0x5555560e42c0, vaddr=vaddr@entry=4096, paddr=4096, attrs=attrs@entry=..., prot=7, mmu_idx=mmu_idx@entry=3, size=4096) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c:700
+#1  0x000055555582471a in tlb_set_page (cpu=cpu@entry=0x5555560e42c0, vaddr=vaddr@entry=4096, paddr=<optimized out>, prot=<optimized out>, mmu_idx=mmu_idx@entry=3, size=size@entry=4096) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c:847
+#2  0x000055555589fa49 in riscv_cpu_tlb_fill (cs=0x5555560e42c0, address=4096, size=<optimized out>, access_type=MMU_INST_FETCH, mmu_idx=3, probe=<optimized out>, retaddr=0) at /home/lenovo/oslab/src/qemu-4.1.1/target/riscv/cpu_helper.c:472
+#3  0x000055555582119f in tlb_fill (cpu=cpu@entry=0x5555560e42c0, addr=addr@entry=4096, size=size@entry=0, access_type=access_type@entry=MMU_INST_FETCH, mmu_idx=mmu_idx@entry=3, retaddr=retaddr@entry=0) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c:878
+#4  0x0000555555824845 in get_page_addr_code (env=0x5555560eccd0, addr=addr@entry=4096) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c:1032
+#5  0x000055555583f478 in tb_htable_lookup (cpu=cpu@entry=0x5555560e42c0, pc=pc@entry=4096, cs_base=cs_base@entry=0, flags=flags@entry=3, cf_mask=4278714368) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cpu-exec.c:339
+Breakpoint 3 at 0x555555824b00: file /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c, line 1448.
+Breakpoint 4 at 0x55555589f070: file /home/lenovo/oslab/src/qemu-4.1.1/target/riscv/cpu_helper.c, line 158.
+=== DATA LOAD SLOW HELPER ===
+env = 0x5555560eccd0
+addr = 18446744072637939712
+oi = 49
+retaddr = 140737304740156
+#0  helper_le_ldq_mmu (env=0x5555560eccd0, addr=18446744072637939712, oi=49, retaddr=140737304740156) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c:1448
+#1  0x00007ffff50e417a in code_gen_buffer ()
+#2  0x000055555583f156 in cpu_tb_exec (cpu=cpu@entry=0x5555560e42c0, itb=itb@entry=0x7ffff50e4040 <code_gen_buffer+19>) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cpu-exec.c:173
+#3  0x000055555583faad in cpu_loop_exec_tb (tb_exit=<synthetic pointer>, last_tb=<synthetic pointer>, tb=0x7ffff50e4040 <code_gen_buffer+19>, cpu=0x5555560e42c0) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cpu-exec.c:621
+
+Thread 3 "qemu-system-ris" hit Breakpoint 4, get_physical_address (env=env@entry=0x5555560eccd0, physical=physical@entry=0x7ffff50e23d0, prot=prot@entry=0x7ffff50e23cc, addr=addr@entry=18446744072637939712, access_type=access_type@entry=0, mmu_idx=mmu_idx@entry=1) at /home/lenovo/oslab/src/qemu-4.1.1/target/riscv/cpu_helper.c:158
+158	{
+=== PAGED DATA LOAD ===
+env = 0x5555560eccd0
+physical = 0x7ffff50e23d0
+prot = 0x7ffff50e23cc
+addr = 18446744072637939712
+access_type = 0
+mmu_idx = 1
+$2 = 0x8000000000080206
+#0  get_physical_address (env=env@entry=0x5555560eccd0, physical=physical@entry=0x7ffff50e23d0, prot=prot@entry=0x7ffff50e23cc, addr=addr@entry=18446744072637939712, access_type=access_type@entry=0, mmu_idx=mmu_idx@entry=1) at /home/lenovo/oslab/src/qemu-4.1.1/target/riscv/cpu_helper.c:158
+#1  0x000055555589f8f0 in riscv_cpu_tlb_fill (cs=0x5555560e42c0, address=18446744072637939712, size=8, access_type=MMU_DATA_LOAD, mmu_idx=1, probe=false, retaddr=140737304740156) at /home/lenovo/oslab/src/qemu-4.1.1/target/riscv/cpu_helper.c:451
+#2  0x000055555582119f in tlb_fill (cpu=cpu@entry=0x5555560e42c0, addr=addr@entry=18446744072637939712, size=size@entry=8, access_type=access_type@entry=MMU_DATA_LOAD, mmu_idx=mmu_idx@entry=1, retaddr=retaddr@entry=140737304740156) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c:878
+#3  0x0000555555824d23 in load_helper (full_load=0x555555824b00 <helper_le_ldq_mmu>, code_read=false, big_endian=false, size=8, retaddr=140737304740156, oi=49, addr=18446744072637939712, env=0x5555560eccd0) at /home/lenovo/oslab/src/qemu-4.1.1/include/exec/cpu-all.h:404
+#4  helper_le_ldq_mmu (env=0x5555560eccd0, addr=18446744072637939712, oi=49, retaddr=140737304740156) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c:1449
+#5  0x00007ffff50e417a in code_gen_buffer ()
+#6  0x000055555583f156 in cpu_tb_exec (cpu=cpu@entry=0x5555560e42c0, itb=itb@entry=0x7ffff50e4040 <code_gen_buffer+19>) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cpu-exec.c:173
+#7  0x000055555583faad in cpu_loop_exec_tb (tb_exit=<synthetic pointer>, last_tb=<synthetic pointer>, tb=0x7ffff50e4040 <code_gen_buffer+19>, cpu=0x5555560e42c0) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cpu-exec.c:621
+#8  cpu_exec (cpu=cpu@entry=0x5555560e42c0) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cpu-exec.c:732
+#9  0x00005555558068fd in tcg_cpu_exec (cpu=0x5555560e42c0) at /home/lenovo/oslab/src/qemu-4.1.1/cpus.c:1435
+WALK_STEP 0
+165	    if (mode == PRV_M && access_type != MMU_INST_FETCH) {
+WALK_STEP 1
+243	    return env->features & (1ULL << feature);
+WALK_STEP 2
+177	    *prot = 0;
+WALK_STEP 3
+181	    int mxr = get_field(env->mstatus, MSTATUS_MXR);
+WALK_STEP 4
+183	    if (env->priv_ver >= PRIV_VERSION_1_10_0) {
+WALK_STEP 5
+184	        base = get_field(env->satp, SATP_PPN) << PGSHIFT;
+WALK_STEP 6
+185	        sum = get_field(env->mstatus, MSTATUS_SUM);
+WALK_STEP 7 base=0x80206000
+187	        switch (vm) {
+WALK_STEP 8 base=0x80206000
+226	    target_ulong masked_msbs = (addr >> (va_bits - 1)) & mask;
+WALK_STEP 9 base=0x80206000 levels=0x3 ptidxbits=0x9 ptesize=0x8
+227	    if (masked_msbs != 0 && masked_msbs != mask) {
+WALK_STEP 10 base=0x80206000 levels=0x3 ptidxbits=0x9 ptesize=0x8
+231	    int ptshift = (levels - 1) * ptidxbits;
+WALK_STEP 11 base=0x80206000 levels=0x3 ptidxbits=0x9 ptesize=0x8 ptshift=0x12
+237	    for (i = 0; i < levels; i++, ptshift -= ptidxbits) {
+WALK_STEP 12 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 i=0x0
+242	        target_ulong pte_addr = base + idx * ptesize;
+WALK_STEP 13 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 i=0x0 idx=0x1ff
+243	    return env->features & (1ULL << feature);
+WALK_STEP 14 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 i=0x0 idx=0x1ff pte_addr=0x80206ff8
+252	        target_ulong pte = ldq_phys(cs->as, pte_addr);
+WALK_STEP 15 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 i=0x0 idx=0x1ff pte_addr=0x80206ff8
+254	        target_ulong ppn = pte >> PTE_PPN_SHIFT;
+WALK_STEP 16 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 i=0x0 idx=0x1ff pte_addr=0x80206ff8 pte=0x200000cf
+256	        if (!(pte & PTE_V)) {
+WALK_STEP 17 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 i=0x0 idx=0x1ff pte_addr=0x80206ff8 pte=0x200000cf ppn=0x80000
+259	        } else if (!(pte & (PTE_R | PTE_W | PTE_X))) {
+WALK_STEP 18 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 i=0x0 idx=0x1ff pte_addr=0x80206ff8 pte=0x200000cf ppn=0x80000
+265	        } else if ((pte & (PTE_R | PTE_W | PTE_X)) == (PTE_W | PTE_X)) {
+WALK_STEP 19 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 i=0x0 idx=0x1ff pte_addr=0x80206ff8 pte=0x200000cf ppn=0x80000
+268	        } else if ((pte & PTE_U) && ((mode != PRV_U) &&
+WALK_STEP 20 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 i=0x0 idx=0x1ff pte_addr=0x80206ff8 pte=0x200000cf ppn=0x80000
+273	        } else if (!(pte & PTE_U) && (mode != PRV_S)) {
+WALK_STEP 21 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 i=0x0 idx=0x1ff pte_addr=0x80206ff8 pte=0x200000cf ppn=0x80000
+276	        } else if (ppn & ((1ULL << ptshift) - 1)) {
+WALK_STEP 22 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 i=0x0 idx=0x1ff pte_addr=0x80206ff8 pte=0x200000cf ppn=0x80000
+279	        } else if (access_type == MMU_DATA_LOAD && !((pte & PTE_R) ||
+WALK_STEP 23 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 i=0x0 idx=0x1ff pte_addr=0x80206ff8 pte=0x200000cf ppn=0x80000
+295	            if (updated_pte != pte) {
+WALK_STEP 24 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 idx=0x1ff pte_addr=0x80206ff8 pte=0x200000cf ppn=0x80000
+334	            *physical = (ppn | (vpn & ((1L << ptshift) - 1))) << PGSHIFT;
+WALK_STEP 25 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 idx=0x1ff pte_addr=0x80206ff8 pte=0x200000cf ppn=0x80000
+337	            if ((pte & PTE_R) || ((pte & PTE_X) && mxr)) {
+WALK_STEP 26 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 idx=0x1ff pte_addr=0x80206ff8 pte=0x200000cf ppn=0x80000
+338	                *prot |= PAGE_READ;
+WALK_STEP 27 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 idx=0x1ff pte_addr=0x80206ff8 pte=0x200000cf ppn=0x80000
+340	            if ((pte & PTE_X)) {
+WALK_STEP 28 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 idx=0x1ff pte_addr=0x80206ff8 pte=0x200000cf ppn=0x80000
+341	                *prot |= PAGE_EXEC;
+WALK_STEP 29 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 idx=0x1ff pte_addr=0x80206ff8 pte=0x200000cf ppn=0x80000
+345	            if ((pte & PTE_W) &&
+WALK_STEP 30 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 idx=0x1ff pte_addr=0x80206ff8 pte=0x200000cf ppn=0x80000
+347	                *prot |= PAGE_WRITE;
+WALK_STEP 31 base=0x80206000 levels=0x3 ptidxbits=0x9 ptshift=0x12 idx=0x1ff pte_addr=0x80206ff8 pte=0x200000cf ppn=0x80000
+199	            return TRANSLATE_SUCCESS;
+WALK_STEP 32
+riscv_cpu_tlb_fill (cs=0x5555560e42c0, address=18446744072637939712, size=8, access_type=MMU_DATA_LOAD, mmu_idx=1, probe=false, retaddr=140737304740156) at /home/lenovo/oslab/src/qemu-4.1.1/target/riscv/cpu_helper.c:453
+453	    if (mode == PRV_M && access_type != MMU_INST_FETCH) {
+PAGED_PHYSICAL=0x80208000
+Breakpoint 5 at 0x55555589f070: file /home/lenovo/oslab/src/qemu-4.1.1/target/riscv/cpu_helper.c, line 158.
+Temporary breakpoint 6 at 0x555555824110: file /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c, line 700.
+
+Thread 3 "qemu-system-ris" hit Temporary breakpoint 6, tlb_set_page_with_attrs (cpu=cpu@entry=0x5555560e42c0, vaddr=vaddr@entry=18446744072637939712, paddr=2149613568, attrs=attrs@entry=..., prot=7, mmu_idx=mmu_idx@entry=1, size=4096) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c:700
+700	{
+=== SOFTWARE TLB FILL ===
+cpu = 0x5555560e42c0
+vaddr = 18446744072637939712
+paddr = 2149613568
+attrs = {unspecified = 1, secure = 0, user = 0, requester_id = 0, target_tlb_bit0 = 0, target_tlb_bit1 = 0, target_tlb_bit2 = 0}
+prot = 7
+mmu_idx = 1
+size = 4096
+#0  tlb_set_page_with_attrs (cpu=cpu@entry=0x5555560e42c0, vaddr=vaddr@entry=18446744072637939712, paddr=2149613568, attrs=attrs@entry=..., prot=7, mmu_idx=mmu_idx@entry=1, size=4096) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c:700
+#1  0x000055555582471a in tlb_set_page (cpu=cpu@entry=0x5555560e42c0, vaddr=vaddr@entry=18446744072637939712, paddr=<optimized out>, prot=<optimized out>, mmu_idx=mmu_idx@entry=1, size=size@entry=4096) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c:847
+#2  0x000055555589fa49 in riscv_cpu_tlb_fill (cs=0x5555560e42c0, address=18446744072637939712, size=<optimized out>, access_type=MMU_DATA_LOAD, mmu_idx=1, probe=<optimized out>, retaddr=140737304740156) at /home/lenovo/oslab/src/qemu-4.1.1/target/riscv/cpu_helper.c:472
+#3  0x000055555582119f in tlb_fill (cpu=cpu@entry=0x5555560e42c0, addr=addr@entry=18446744072637939712, size=size@entry=8, access_type=access_type@entry=MMU_DATA_LOAD, mmu_idx=mmu_idx@entry=1, retaddr=retaddr@entry=140737304740156) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c:878
+#4  0x0000555555824d23 in load_helper (full_load=0x555555824b00 <helper_le_ldq_mmu>, code_read=false, big_endian=false, size=8, retaddr=140737304740156, oi=49, addr=18446744072637939712, env=0x5555560eccd0) at /home/lenovo/oslab/src/qemu-4.1.1/include/exec/cpu-all.h:404
+#5  helper_le_ldq_mmu (env=0x5555560eccd0, addr=18446744072637939712, oi=49, retaddr=140737304740156) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c:1449
+#6  0x00007ffff50e417a in code_gen_buffer ()
+$3 = {mask = 0xfe0, table = 0x7fffe803a3b0}
+0x000055555582471a in tlb_set_page (cpu=cpu@entry=0x5555560e42c0, vaddr=vaddr@entry=18446744072637939712, paddr=<optimized out>, prot=<optimized out>, mmu_idx=mmu_idx@entry=1, size=size@entry=4096) at /home/lenovo/oslab/src/qemu-4.1.1/accel/tcg/cputlb.c:849
+849	}
+TLB_INDEX=0x8 READ_TAG=0xffffffffc0208000 ADDEND=0x80001fe00000
+HOST_DATA_VALUE=0x123456789abcdef0

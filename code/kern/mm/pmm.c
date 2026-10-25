@@ -14,9 +14,9 @@
 
 // virtual address of physical page array
 struct Page *pages;
-// amount of physical memory (in pages)
+// Absolute page number of the managed physical memory's exclusive upper bound.
 size_t npage = 0;
-// the kernel image is mapped at VA=KERNBASE and PA=info.base
+// Kernel virtual address minus physical address (fixed boot mapping).
 uint64_t va_pa_offset;
 // memory starts at 0x80000000 in RISC-V
 // DRAM_BASE defined in riscv.h as 0x80000000

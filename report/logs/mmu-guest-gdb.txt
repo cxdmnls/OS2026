@@ -1,0 +1,24 @@
+The target architecture is set to "riscv:rv64".
+0x0000000000001000 in ?? ()
+pc             0x1000	0x1000
+=> 0x1000:	auipc	t0,0x0
+   0x1004:	addi	a1,t0,32
+   0x1008:	csrr	a0,mhartid
+   0x100c:	ld	t0,24(t0)
+   0x1010:	jr	t0
+Breakpoint 1 at 0xffffffffc020136a: file kern/mm/mmu_probe.c, line 10.
+
+Breakpoint 1, 0xffffffffc020136a in mmu_probe () at kern/mm/mmu_probe.c:10
+10	    __asm__ volatile(
+pc             0xffffffffc020136a	0xffffffffc020136a <mmu_probe+12>
+satp           0x8000000000080206	-9223372036854251002
+=> 0xffffffffc020136a <mmu_probe+12>:	ld	a5,0(a1)
+   0xffffffffc020136c <mmu_probe+14>:	ld	a3,0(a1)
+   0xffffffffc020136e <mmu_probe+16>:	auipc	a4,0x2
+0xffffffffc020136c	10	    __asm__ volatile(
+pc             0xffffffffc020136c	0xffffffffc020136c <mmu_probe+14>
+20	    assert(first == 0x123456789abcdef0ULL && second == first);
+pc             0xffffffffc020136e	0xffffffffc020136e <mmu_probe+16>
+LOAD_RESULTS first=0x123456789abcdef0 second=0x123456789abcdef0
+TWO_LOADS_COMPLETED pc=0xffffffffc020136e
+[Inferior 1 (process 1) detached]

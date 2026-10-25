@@ -1,4 +1,4 @@
-# Lab2 阶段交付：物理内存初始化
+# Lab2：物理内存、对象分配与 MMU 调试
 
 本分支按 `code/` 和 `report/` 提交。常侯鑫实现 `page_init()`，张岩实现 Buddy System，邓耀飞完成 First-Fit 分析和 Best-Fit 实现。默认分配器为 Best-Fit。
 
@@ -28,8 +28,33 @@ python3 tools/verify_page_init.py --log-dir ../report/logs
 - `make clean` 后可运行 `make PMM=best_fit qemu`、`make PMM=best_fit grade`。
 - 默认 `PMM=best_fit`，可用 `PMM=first_fit` 或 `PMM=buddy` 切换；切换前必须 `make clean`。
 - 2026-10-25 已运行 Best-Fit 评分，结果 20/20；详细分析见 `../report/report.md`。
-- Makefile 优先选择 `/opt/qemu-4.1.1/bin/qemu-system-riscv64`，亦支持 `QEMU=...` 覆盖。系统新版本未被覆盖。
-- 提示词草稿暂存仓库外，`report/prompt.md` 未修改。
+- Makefile 使用当前环境的 `QEMU` 或 PATH 中的 `qemu-system-riscv64`，支持 `QEMU=...` 覆盖。
+- 本轮补充规格、复核及新任务提示词见 `../report/prompt.md`；未把新整理的内容伪装成队友历史会话。
+
+## 本机环境与扩展验证
+
+WSL 中激活 OS 课程隔离环境：
+
+```bash
+source /mnt/e/Develop/Pycharm/PycharmData/OS/environment/oslab-env.sh
+cd /mnt/e/Develop/Pycharm/PycharmData/OS/OS2026/code
+make check-extensions
+make trace-mmu
+```
+
+本机为 QEMU 4.1.1、SiFive GCC 10.2.0、Make 4.3。`check-extensions` 在三种 PMM
+上验证 SLUB 对象分配和两次真实 ld 读取，最后保留 Best-Fit 构建。
+`trace-mmu` 需要原生 GDB（本机 15.1）与工具链的 RISC-V GDB，以及带符号的
+QEMU；默认复用 `/home/lenovo/oslab/build/qemu-4.1.1/riscv64-softmmu/qemu-system-riscv64`，
+可通过 `MMU_QEMU` 改路径。它动态读取符号、选择端口，记录真实 CPU 查表和
+软件 TLB 回填，不要求运行者手工协调两个 GDB 的等待关系。
+
+新增源码：`slub.c/slub.h`、独立的 `slub_test.c`、`mmu_probe.c/mmu_probe.h`。
+`kern_init()` 在 PMM 检查后执行对象分配测试和 MMU 探针，最后保持无限循环。
+所有实际输出在 `report/logs/`；截图按小组安排后续采集到 `report/images/`。
+
+当前以教学用单执行流实现大小类、位图对象槽和空 slab 页回收，不等于 Linux
+完整 SLUB；页表调试观察到的是顶层大页叶子，报告没有声称实际查遍三层。
 
 ## 实现边界
 
