@@ -1,7 +1,7 @@
 PROJ	:= lab2
 # Select the physical page allocator at build time.  Run `make clean` after
 # changing PMM because objects do not encode this option in their names.
-PMM ?= first_fit
+PMM ?= best_fit
 ifeq ($(PMM),buddy)
 DEFS += -DPMM_BUDDY
 else ifeq ($(PMM),best_fit)
@@ -20,7 +20,7 @@ GCCPREFIX := riscv64-unknown-elf-
 #endif
 
 ifndef QEMU
-QEMU := qemu-system-riscv64
+QEMU := $(or $(wildcard /opt/qemu-4.1.1/bin/qemu-system-riscv64),qemu-system-riscv64)
 endif
 
 ifndef SPIKE

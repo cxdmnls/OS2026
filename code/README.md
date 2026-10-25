@@ -1,6 +1,6 @@
 # Lab2 阶段交付：物理内存初始化
 
-本分支按 `code/` 和 `report/` 提交。常侯鑫已实现 `kern/mm/pmm.c` 的 `page_init()`；First-Fit 使用框架提供的完整实现，Best-Fit 和 Buddy System 由队友继续完成。
+本分支按 `code/` 和 `report/` 提交。常侯鑫实现 `page_init()`，张岩实现 Buddy System，邓耀飞完成 First-Fit 分析和 Best-Fit 实现。默认分配器为 Best-Fit。
 
 ## 编译和验证
 
@@ -23,11 +23,13 @@ python3 tools/verify_page_init.py --log-dir ../report/logs
 
 ## 队友接手
 
-- 邓耀飞：完成 `kern/mm/best_fit_pmm.c`，保留原有 `basic_check()`、`best_fit_check()`，实现 `best_fit_pmm_manager`。目前此文件保留原始骨架。
-- 张岩：新增 Buddy System 模块和独立测试，并扩展分配器选择方式。不要覆盖已完成的 `page_init()`。
-- Best-Fit 完成后，执行 `make clean`，再执行 `make PMM=best_fit qemu` 和 `make PMM=best_fit grade`。`PMM=best_fit` 会选择对应管理器并编译该模块。
-- 当前默认 `PMM=first_fit`，用于让初始化部分可以独立编译验证。切换模式前必须执行 `make clean`。最终整体验收前需明确采用 Best-Fit（可将默认值改为 `best_fit`），不能把默认 First-Fit 的验证当成 Best-Fit 验证。
-- 本阶段未完成整次 lab2，不能期望当前 `make grade` 完整通过：它还要求 Best-Fit 实现和接入。框架测试及 `YOUR CODE` 标记按各负责人实际实现继续填写。
+- Best-Fit 已实现，原有 `basic_check()`、`best_fit_check()` 保持不变，并补充确定性行为测试。
+- Buddy 与 `page_init()` 保留团队原实现。
+- `make clean` 后可运行 `make PMM=best_fit qemu`、`make PMM=best_fit grade`。
+- 默认 `PMM=best_fit`，可用 `PMM=first_fit` 或 `PMM=buddy` 切换；切换前必须 `make clean`。
+- 2026-10-25 已运行 Best-Fit 评分，结果 20/20；详细分析见 `../report/report.md`。
+- Makefile 优先选择 `/opt/qemu-4.1.1/bin/qemu-system-riscv64`，亦支持 `QEMU=...` 覆盖。系统新版本未被覆盖。
+- 提示词草稿暂存仓库外，`report/prompt.md` 未修改。
 
 ## 实现边界
 
