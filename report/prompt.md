@@ -64,3 +64,23 @@
 **测试提示词：**
 
 > 先从真实分配器取得连续 32 页区域，保存原空闲链表和计数，在该区域重建独立 Buddy 状态，测试结束后恢复原状态并归还页面。连续分配两个 8 页块，检查地址相邻、按 8 页对齐和空闲页数；按顺序释放伙伴，验证合并为 16 页并继续合并为 32 页；请求 3 页，验证按 4 页块分配且释放后完整合并；请求当前空闲页数加 1，验证返回 `NULL` 且状态不变。每个阶段检查 `PG_property`、`property`、地址对齐和管理边界。合并测试曾出现块头为 32 页但 `nr_free` 为 56，定位为摘除伙伴时只更新阶计数，修复后同时更新 `free_area[order].nr_free` 和全局 `nr_free`。最终执行 `make check-buddy`，确认 QEMU 中 init、split、coalesce、非二次幂、内存不足及 `check_alloc_page() succeeded!` 全部通过，并做一次 First-Fit 回归。
+
+## 9. First-Fit 分配算法分析
+
+**对应模块：** `code/kern/mm/default_pmm.c`。本任务只分析和验证框架已有实现。
+
+**分析提示词：**
+
+> 请基于当前 uCore Lab2 的 `default_pmm.c` 和相关头文件，分析 First-Fit 连续物理页分配器。说明 `free_list`、`PG_property`、`property`、`nr_free` 以及 `default_init()`、`default_init_memmap()`、`default_alloc_pages()`、`default_free_pages()` 的作用；解释空闲块按地址组织、分配时从块前端切分、释放时与前后块合并的过程，并说明总空闲页足够但没有足够大连续块时为何仍会失败。给出时间复杂度、外部碎片特点和改进方向。以仓库实际代码为准，不修改 First-Fit 实现，不臆造测试结果；使用真实构建和 QEMU 输出复核分析。
+
+## 10. Best-Fit 连续物理页分配器
+
+**对应模块：** `code/kern/mm/best_fit_pmm.c`、`code/kern/mm/pmm.c` 和 `code/Makefile`。
+
+**实现提示词：**
+
+> 请在现有 uCore Lab2 框架中实现独立的 Best-Fit 分配器并接入 `pmm_manager`。修改 `code/kern/mm/best_fit_pmm.c`，保留 `//lab2 function2-2` 标记并填写学号 `2413404`，不修改 `basic_check()`、`best_fit_check()`、First-Fit、Buddy 或 `page_init()` 的语义。空闲块按 Page 地址递增维护；初始化时正确清理描述符和引用计数，维护块头的 `PG_property`、`property`、`free_area` 和 `nr_free`。分配时扫描所有适配块，选择最小块；大小相同选低地址，恰好匹配可提前结束；从块前端分配并登记剩余尾部。释放时按地址插入并正确处理前合并、后合并和同时连接两侧的情况，吞并块清除块头状态；分配失败时保持状态不变。完成后执行 `make clean`，使用 `PMM=best_fit` 编译并启动 QEMU。
+
+**测试提示词：**
+
+> 请为 Best-Fit 增加确定性内核测试，保留并先执行原有两个检查。使用真实分配器取得测试区域，保存原链表和空闲页数，构造碎片后恢复全局状态并归还页面。覆盖碎片化失败、最小适配块、同大小低地址优先、尾部切分、精确匹配、耗尽以及释放时连接前后块；每项输出明确 PASS。执行 `make PMM=best_fit grade`，再分别回归 First-Fit、Buddy 和真实 QEMU 启动，记录实际结果。

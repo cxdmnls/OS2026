@@ -218,7 +218,9 @@ page2pa(page)  = page2ppn(page) << PGSHIFT
 
 #### 最终提示词
 
-本任务分析框架已有实现，不新增分配算法代码，不另列代码生成提示词。
+**分析提示词：**
+
+> 请基于当前 uCore Lab2 的 `default_pmm.c` 和相关头文件，分析 First-Fit 连续物理页分配器。说明 `free_list`、`PG_property`、`property`、`nr_free` 以及 `default_init()`、`default_init_memmap()`、`default_alloc_pages()`、`default_free_pages()` 的作用；解释空闲块按地址组织、分配时从块前端切分、释放时与前后块合并的过程，并说明总空闲页足够但没有足够大连续块时为何仍会失败。给出时间复杂度、外部碎片特点和改进方向。以仓库实际代码为准，不修改 First-Fit 实现，不臆造测试结果；使用真实构建和 QEMU 输出复核分析。
 
 #### 实现迭代过程
 
@@ -256,11 +258,17 @@ Best-Fit 分配最坏 O(F)，释放 O(n+F)，额外使用一个空闲区表头�
 
 #### 最终提示词
 
-该模块的原始实现提示词尚未归档，需由负责人补充实际使用的记录。
+**实现提示词：**
+
+> 请在现有 uCore Lab2 框架中实现独立的 Best-Fit 分配器并接入 `pmm_manager`。修改 `code/kern/mm/best_fit_pmm.c`，保留 `//lab2 function2-2` 标记并填写学号 `2413404`，不修改 `basic_check()`、`best_fit_check()`、First-Fit、Buddy 或 `page_init()` 的语义。空闲块按 Page 地址递增维护；初始化时正确清理描述符和引用计数，维护块头的 `PG_property`、`property`、`free_area` 和 `nr_free`。分配时扫描所有适配块，选择最小块；大小相同选低地址，恰好匹配可提前结束；从块前端分配并登记剩余尾部。释放时按地址插入并正确处理前合并、后合并和同时连接两侧的情况，吞并块清除块头状态；分配失败时保持状态不变。完成后执行 `make clean`，使用 `PMM=best_fit` 编译并启动 QEMU。
+
+**测试提示词：**
+
+> 请为 Best-Fit 增加确定性内核测试，保留并先执行原有两个检查。使用真实分配器取得测试区域，保存原链表和空闲页数，构造碎片后恢复全局状态并归还页面。覆盖碎片化失败、最小适配块、同大小低地址优先、尾部切分、精确匹配、耗尽以及释放时连接前后块；每项输出明确 PASS。执行 `make PMM=best_fit grade`，再分别回归 First-Fit、Buddy 和真实 QEMU 启动，记录实际结果。
 
 #### 实现迭代过程
 
-保留原有 basic_check()、best_fit_check()，另以碎片化、最小适配块、同尺寸选块、耗尽和双侧合并断言验证行为。完整生成轮数未记录，不编造迭代次数。
+保留原有 basic_check()、best_fit_check()，另以碎片化、最小适配块、同尺寸选块、耗尽和双侧合并断言验证行为。切换 PMM 后曾因复用旧目标文件出现链接错误，先执行 `make clean` 后重新构建解决；脚本 CRLF 问题通过转换为 LF 并添加 `.gitattributes` 解决。
 
 ### 功能模块：Buddy System 页分配与测试
 
