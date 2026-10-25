@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+//lab2 function2-3 2411834
 /*
  * Each entry in free_area holds blocks with exactly 2^order pages.  Every
  * block has one head Page whose PG_property bit is set and whose property is
@@ -251,6 +252,7 @@ static void buddy_restore_state(free_area_t saved[BUDDY_MAX_ORDER]) {
  * local state makes split, merge, OOM, and non-power-of-two behavior
  * reproducible, independent of fragmentation in the rest of physical memory.
  */
+//lab2 function2-3 tests 2411834
 static void buddy_check(void) {
     buddy_validate();
 

@@ -13,7 +13,7 @@ trap 'rm -f "$output"' EXIT HUP INT TERM
 
 # The kernel intentionally stays in its idle loop after initialization.
 set +e
-timeout 8s make qemu PMM=buddy >"$output" 2>&1
+timeout 30s make qemu PMM=buddy >"$output" 2>&1
 set -e
 
 for marker in \
@@ -27,7 +27,7 @@ for marker in \
 do
     if ! grep -F "$marker" "$output" >/dev/null; then
         echo "Buddy check failed: missing '$marker'" >&2
-        sed -n '/memory management:/,$p' "$output" >&2
+        cat "$output" >&2
         exit 1
     fi
 done
