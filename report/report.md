@@ -254,3 +254,92 @@ OS 原理中重要但本实验没有完整覆盖的内容：
 AI 生成的代码仍需人工检查实际反汇编和构建结果。发现 `sbadaddr` 兼容问题后，不能直接忽略编译错误，也不能擅自改变 trapframe 布局，而应确认 CSR 编号和语义后再做兼容处理。当前报告只记录已完成的汇编验证；最终测试结论需在另外两个功能模块集成后补充。
 
 ---
+
+## 附录：未完成内容补充位置
+
+以下部分参考 Lab2 报告的模块化组织方式预留。等到另外两位成员的代码和测试完成后，可直接在本附录中补充，不需要改动前文已经完成的张岩部分。
+
+### A. 中断与时钟模块
+
+**负责人：** 2413603-常侯鑫
+
+**代码位置：** `code/kern/trap/trap.c`
+
+**核心函数：**
+
+```c
+void interrupt_handler(struct trapframe *tf);
+```
+
+建议按 Lab2 报告格式补充以下内容：
+
+1. `IRQ_S_TIMER` 的识别方式与 `scause` 中断位处理。
+2. `ticks` 累加、每 `TICK_NUM` 次输出以及 `clock_set_next_event()` 调用顺序。
+3. 软件中断和未知中断的分类与兜底输出。
+4. 实际 Prompt、迭代过程中出现的 Bug 和修改方法。
+5. 100 ticks、200 ticks、持续定时器及未知中断测试结果。
+6. 日志文件放在 `report/logs/`，必要的运行截图放在 `report/images/`。
+
+### B. 异常处理模块
+
+**负责人：** 2413404-邓耀飞
+
+**代码位置：** `code/kern/trap/trap.c`
+
+**核心函数：**
+
+```c
+void exception_handler(struct trapframe *tf);
+```
+
+建议按 Lab2 报告格式补充以下内容：
+
+1. 断点异常和非法指令异常的识别与输出格式。
+2. `tf->epc` 更新规则，以及避免重复执行异常指令的原因。
+3. 未知异常的 `print_trapframe(tf)` 兜底路径。
+4. 实际 Prompt、迭代过程中出现的 Bug 和修改方法。
+5. 非法指令返回、断点返回和异常兜底测试结果。
+6. 集成后的 `make qemu` 输出、测试截图和日志。
+
+### C. 实验环境补充
+
+常侯鑫、邓耀飞的实际 AI 工具、底层模型和特殊配置补入第二章表格。
+
+### D. 最终集成与评分
+
+完成 `interrupt_handler()` 和 `exception_handler()` 后，应替换第五章中的待办状态，并补充：
+
+```text
+make
+make qemu
+make grade
+```
+
+至少记录：
+
+- Trap 上下文与断点返回测试结果。
+- 非法指令异常返回测试结果。
+- 持续时钟中断测试结果。
+- 最终 `make grade` 总分。
+- 所有成员模块合并后仍保留的 `lab3` 注释和各自学号。
+
+### E. 报告最终检查
+
+- [ ] 常侯鑫补充中断与时钟模块。
+- [ ] 邓耀飞补充异常处理与集成演示。
+- [ ] Prompt 完成后统一补入 `report/prompt.md` 和对应模块。
+- [ ] 测试截图放入 `report/images/`。
+- [ ] 测试日志放入 `report/logs/`。
+- [ ] 删除第五章中当前仅适用于未集成的待办说明。
+- [ ] 确认最终报告只保留与真实执行结果一致的结论。
+
+---
+
+## 参考资料
+
+- [Lab3 实验指导书](http://oslab.mobisys.top/lab2026/_book/lab3/lab3.html)
+- [Lab3 练习说明](http://oslab.mobisys.top/lab2026/_book/lab3/lab3_2_1_exercise.html)
+- [Lab3 报告要求](http://oslab.mobisys.top/lab2026/_book/lab3/lab3_4_lab_requirement.html)
+- [Lab2 报告格式参考](https://github.com/cxdmnls/OS2026/blob/lab2/report/report.md)
+
+---
