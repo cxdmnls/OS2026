@@ -1,0 +1,27 @@
+Lab3 Trap entry verification
+Date: 2026-10-28
+Owner: 2411834 张岩
+
+[Assembly check]
+Command:
+riscv64-unknown-elf-gcc -mcmodel=medany -std=gnu99 -Wno-unused -Werror \
+  -fno-builtin -Wall -O2 -nostdinc -Ilibs -Ikern/debug -Ikern/driver \
+  -Ikern/trap -Ikern/mm -Ikern/arch -fno-stack-protector \
+  -ffunction-sections -fdata-sections -g \
+  -c kern/trap/trapentry.S -o /tmp/lab3_report_trapentry.o
+
+Result: PASS
+
+Symbols:
+                 U trap
+0000000000000002 T __alltraps
+000000000000006a T __trapret
+
+[Full build at this stage]
+Result: PENDING
+Reason:
+kern/trap/trap.c:89: implicit declaration of function 'interrupt_handler'
+kern/trap/trap.c:92: implicit declaration of function 'exception_handler'
+
+The two handler functions are assigned to other group members and must be
+integrated before running QEMU and make grade.
