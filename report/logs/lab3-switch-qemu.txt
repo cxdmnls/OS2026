@@ -1,0 +1,21 @@
+Lab3 Challenge 1 verification
+Date: 2026-10-28
+Owner: 2411834 张岩
+
+Configuration:
+- QEMU 4.1.1
+- OpenSBI v0.4
+- RISC-V 64-bit Sv39
+- Temporary test integration used only the completed Lab2 page_init and
+  minimal handlers for the two modules owned by other group members.
+
+Result:
+[Challenge 1] user/kernel mode switch test
+[Challenge 1] S -> U -> S -> U -> S: PASS
+100 ticks
+100 ticks
+100 ticks
+...
+
+The PASS line proves two complete user-mode entries and returns while the
+supervisor timer continues to be re-armed after the challenge completes.

@@ -35,6 +35,9 @@ int kern_init(void) {
     clock_init();   // init clock interrupt
     intr_enable();  // enable irq interrupt
 
+    //lab3 challenge1 2411834
+    lab3_switch_test();  // user/kernel mode switch test
+
     /* do nothing */
     while (1)
         ;

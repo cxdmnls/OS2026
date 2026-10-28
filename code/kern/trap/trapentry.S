@@ -6,7 +6,12 @@
 
     .macro SAVE_ALL
 
-    csrw sscratch, sp
+    # sscratch is zero while running in S mode and contains the kernel trap
+    # stack top while running in U mode. Swap it with sp to select the stack.
+    csrrw sp, sscratch, sp
+    bnez sp, 1f
+    csrr sp, sscratch
+1:
 
     addi sp, sp, -36 * REGBYTES
     # save x registers
@@ -120,6 +125,14 @@ __alltraps:
 
     .globl __trapret
 __trapret:
+    # Returning to U mode requires sscratch to hold the kernel trap stack for
+    # the next user-mode Trap. Inspect the saved status before restoring it.
+    LOAD t0, 32*REGBYTES(sp)
+    andi t0, t0, SSTATUS_SPP
+    bnez t0, 1f
+    la t0, lab3_switch_kernel_stack_top
+    csrw sscratch, t0
+1:
     RESTORE_ALL
     # return from supervisor call
     sret

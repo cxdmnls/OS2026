@@ -48,8 +48,13 @@ struct trapframe {
 
 void trap(struct trapframe *tf);
 void idt_init(void);
+void interrupt_handler(struct trapframe *tf);
+void exception_handler(struct trapframe *tf);
 void print_trapframe(struct trapframe *tf);
 void print_regs(struct pushregs* gpr);
 bool trap_in_kernel(struct trapframe *tf);
+
+void lab3_switch_test(void);
+bool lab3_switch_test_handle(struct trapframe *tf);
 
 #endif /* !__KERN_TRAP_TRAP_H__ */
