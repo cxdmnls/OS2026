@@ -14,7 +14,7 @@
 
 | 成员 | 负责的练习/模块 |
 |------|----------------|
-| 2411834-张岩 | 第一部分：`RESTORE_ALL` 与 `__alltraps`，Trap 上下文恢复、入口调用及 Challenge 用户/内核态切换 |
+| 2411834-张岩 | 第一部分：`RESTORE_ALL` 与 `__alltraps`，Trap 上下文恢复和入口调用 |
 | 2413603-常侯鑫 | 第二部分：`interrupt_handler()`，中断分类与时钟中断 |
 | 2413404-邓耀飞 | 第三部分：`exception_handler()`，异常处理、代码集成与课堂演示 |
 
@@ -108,8 +108,6 @@ void trap(struct trapframe *tf);
 `RESTORE_ALL` 是 `SAVE_ALL` 的逆操作。它从当前栈上的 trapframe 恢复四个 CSR 和 31 个可写通用寄存器。`x0` 恒为零，不需要恢复；`x2(sp)` 必须最后恢复，因为其他字段都依赖 trapframe 的基址。
 
 `__alltraps` 是硬件 Trap 和软件处理逻辑之间的桥。它先执行 `SAVE_ALL`，再把 trapframe 地址作为第一个参数传给 `trap()`。`trap()` 返回后，执行流落到 `__trapret`，由 `RESTORE_ALL` 恢复现场并执行 `sret`。
-
-为了支持 Challenge 从用户态进入 Trap，`SAVE_ALL` 在原有约定上增加了 `csrrw sp, sscratch, sp`：内核态 Trap 时 `sscratch` 为 0，交换后恢复原内核 `sp`；用户态 Trap 时 `sscratch` 保存内核 Trap 栈顶，交换后直接切换到内核栈，而用户 `sp` 被保存在 trapframe 中。`__trapret` 根据保存的 `sstatus.SPP` 判断是否返回 U 模式，并在返回 U 模式前重新设置 `sscratch`。
 
 关键实现如下：
 
@@ -228,54 +226,6 @@ void exception_handler(struct trapframe *tf);
 
 ---
 
-### Challenge：用户态/内核态切换测试
-
-**负责人：** 2411834-张岩
-
-本 Challenge 实际执行以下往返流程：
-
-```text
-S 模式 lab3_switch_test()
-  → sret 进入 U 模式
-  → 用户代码执行 ecall
-  → __alltraps 保存用户上下文
-  → 内核处理第一次 ecall 并返回 U 模式
-  → 用户代码再次执行 ecall
-  → 内核恢复 S 模式并返回 lab3_switch_test()
-```
-
-实现由以下三部分组成：
-
-1. `kern/trap/lab3_switch_entry.S` 建立测试专用的三级 Sv39 映射，将代码页映射到 `0x40000000`、用户栈映射到 `0x40001000`。内核自身的 1 GiB 映射仍保持 S 模式权限。
-2. `kern/trap/lab3_switch.c` 分两阶段处理 U 模式 `ecall`：第一次把返回地址改成用户态第二段代码，第二次把 `sstatus.SPP` 置为 1 并返回内核恢复点。
-3. `trapentry.S` 利用 `sscratch` 区分内核态和用户态 Trap。进入用户态前，`sscratch` 保存内核 Trap 栈顶；从 U 模式陷入时，入口先切换到该内核栈；准备返回 U 模式前，再把下一次 Trap 所需的内核栈顶写回 `sscratch`。
-
-用户态测试代码只执行 `ecall`，失败时执行 `ebreak`，不执行任何特权 CSR 指令。测试结束后删除临时用户映射，恢复内核栈和调用地址。
-
-#### Challenge 调试问题
-
-第一版直接修改内核 1 GiB 页的 U 位来执行测试代码。QEMU 日志持续报告 `riscv_raise_exception: 12`，即指令页错误，未进入预期的用户态入口。将该页权限设为 U=1 仍无法稳定通过后，改为单独建立三级页表和两个 4 KiB U 页面，问题解决。
-
-另外两个实际问题是：
-
-- C 文件最初使用了框架未定义的 `true/false`，编译报错；改为框架的布尔约定 `1/0`。
-- `lab3_switch.c` 和 `lab3_switch.S` 会映射到同一个目标文件名；将汇编文件改名为 `lab3_switch_entry.S`。
-
-实际 QEMU 输出：
-
-```text
-[Challenge 1] user/kernel mode switch test
-[Challenge 1] S -> U -> S -> U -> S: PASS
-100 ticks
-100 ticks
-...
-```
-
-说明用户态进入、两次 Trap 返回和内核时钟中断均正常。完整输出见
-[`logs/lab3-switch-qemu.txt`](logs/lab3-switch-qemu.txt)。
-
----
-
 ## 五、测试与验证
 
 当前已完成第一部分的汇编级验证：
@@ -286,8 +236,6 @@ S 模式 lab3_switch_test()
 | `__alltraps` 符号存在 | 通过 |
 | `__trapret` 符号存在 | 通过 |
 | 恢复顺序检查 | 通过，`sp` 最后恢复 |
-| Challenge 用户态/内核态往返 | 通过，QEMU 输出 `S -> U -> S -> U -> S: PASS` |
-| Challenge 后时钟中断继续运行 | 通过，持续输出 `100 ticks` |
 | 完整性 `make` | 待常侯鑫、邓耀飞补充处理函数 |
 | QEMU 运行 | 待集成后执行 |
 | `make grade` | 待集成后执行 |
@@ -301,18 +249,6 @@ S 模式 lab3_switch_test()
 ```
 
 完整测试截图和 `make grade` 结果待代码集成后补充到 `report/images/` 与 `report/logs/`。
-
-为确认修改后的 Trap 入口没有破坏普通测试，在临时测试副本中使用了已完成的 Lab2 `page_init()` 和两个仅用于验证的最小处理函数，运行官方评分脚本得到：
-
-```text
-trap entry, register restore, and breakpoint EPC: PASS (35/35)
-illegal instruction EPC advance and return:        PASS (25/25)
-re-armed supervisor timer and repeated trap return: PASS (40/40)
-Total Score: 100/100
-```
-
-这次 100/100 是兼容性预测试结果，不代表另外两位成员最终代码已经提交。临时处理函数没有进入正式仓库，测试条件记录在
-[`logs/lab3-grade-pretest.txt`](logs/lab3-grade-pretest.txt)。
 
 ---
 
@@ -378,7 +314,7 @@ make grade
 OS 原理中重要但本实验没有完整覆盖的内容：
 
 1. 进程控制块、进程状态转换和多进程调度；本实验还没有创建多个进程。
-2. 用户态进程的创建、加载和完整系统调用语义；Challenge 只验证了用户态进入、两次 `ecall` Trap 和返回，并未创建进程。
+2. 用户态进程的创建、加载和完整系统调用语义；本实验只处理内核态 Trap，没有创建用户进程。
 3. 完整的进程上下文切换、页表切换和地址空间隔离；Lab3 只处理一次 Trap 的寄存器现场。
 4. 并发控制、锁、信号量和多核中断分发；当前主要运行单核内核逻辑。
 5. 文件系统、设备驱动程序框架、虚拟内存缺页处理和页面置换。

@@ -100,10 +100,6 @@ static inline void trap_dispatch(struct trapframe *tf) {
  * trapframe and then uses the iret instruction to return from the exception.
  * */
 void trap(struct trapframe *tf) {
-    //lab3 challenge1 2411834
-    if (lab3_switch_test_handle(tf)) {
-        return;
-    }
     // dispatch based on what type of trap occurred
     trap_dispatch(tf);
 }
