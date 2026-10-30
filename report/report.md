@@ -204,7 +204,43 @@ void interrupt_handler(struct trapframe *tf);
 2. 每经过 `TICK_NUM` 次时钟中断输出一次统计信息，保证时钟中断能够持续触发。
 3. 对软件中断输出相应提示；对无法识别的原因调用 `print_trapframe(tf)` 输出完整上下文。
 
-待负责人完成代码后，在本节补充实际实现过程、最终 Prompt、迭代中遇到的 Bug、100 ticks/200 ticks 以及未知中断测试结果。
+本模块已在 `interrupt_handler()` 中完成中断原因分类。处理函数通过清除 `scause` 最高位取得中断编号。对 supervisor timer，代码先调用 `clock_set_next_event()` 重新装载一次性定时器，再递增 `ticks`；达到 `TICK_NUM` 的整数倍时调用已有的 `print_ticks()`。默认累计输出 10 次统计信息后调用 `sbi_shutdown()`；构建参数可以覆盖 `SHUTDOWN_AFTER`。软件中断会输出提示并清除 `SIP_SSIP`，外部中断输出对应提示，未知中断会输出原因并调用 `print_trapframe()`。
+
+#### 最终提示词
+
+以下提示词按实验指导书规定的四段结构编写，完整记录见 `report/prompt.md`：
+
+````markdown
+[PROMPT]
+任务：修改 `code/kern/trap/trap.c`，实现 `interrupt_handler(struct trapframe *tf)`，完成 Lab3 必做的中断分类和 supervisor timer 处理。必须修改项目中的实际文件，保留已有 `trap_dispatch()`、`print_trapframe()` 和 `print_ticks()`，只补全 `lab3` 标记对应的功能；旧版 Challenge 不在本任务范围内。
+输出要求：以当前工程中的真实宏、结构体和接口为准，直接修改文件并保持公开函数签名不变，不增加与实验无关的功能。
+
+[RELY]
+- `struct trapframe` 包含 `cause` 和 `epc`；`tf->cause` 的最高位为 1 表示中断，低位保存中断编号。
+- 可用宏：`IRQ_S_SOFT`、`IRQ_S_TIMER`、`IRQ_S_EXT`、`SIP_SSIP`、`TICK_NUM`。
+- 可用全局变量和函数：`volatile size_t ticks`、`clock_set_next_event()`、`print_trapframe(tf)`、`print_ticks()`、`sbi_shutdown()`、`clear_csr()`。
+- SBI 定时器事件是一次性的，处理一次 timer interrupt 后必须重新设置下一次事件。
+- 当前工程未定义 `SHUTDOWN_AFTER`；实现为默认 10 次统计输出后关机（即 1000 ticks），并允许构建参数覆盖该值。
+
+[GUARANTEE]
+必须实现：`void interrupt_handler(struct trapframe *tf);`
+允许使用本文件已有的辅助函数和宏，不修改 `trap_dispatch()`、函数签名或 Trap frame 布局。
+
+[SPECIFICATION]
+Pre-Condition：`tf` 指向当前 Trap frame，调用者已经确认该 Trap 是中断；`tf->cause` 使用 RISC-V 的中断编码。
+Post-Condition：中断被分类并完成对应处理，函数返回后可以进入统一的 Trap 恢复流程。
+Case 1：`IRQ_S_TIMER` 时设置下一次时钟事件，递增 `ticks`；每达到 `TICK_NUM` 的整数倍调用 `print_ticks()`；统计输出次数达到 `SHUTDOWN_AFTER` 后调用 `sbi_shutdown()`，默认值为 10。
+Case 2：`IRQ_S_SOFT` 时输出 supervisor software interrupt，并清除软件中断挂起位。
+Case 3：`IRQ_S_EXT` 时输出 supervisor external interrupt 提示。
+Case 4：未知原因时输出 `Unknown interrupt: cause <n>` 并调用 `print_trapframe(tf)`。
+Requirements：保留中断原因低位解码；timer 事件必须重新装载；不能修改 `tf->epc`；不实现旧版 Challenge。
+````
+
+#### 实现与验证记录
+
+- `interrupt_handler()` 已实现 timer 重新装载、时钟计数、周期统计、到达阈值后关机，以及软件、外部和未知中断分支。
+- 使用 `make -B obj/kern/trap/trap.o` 单独编译 `trap.c`，编译通过。
+- 全量 `make` 被当前 `best_fit_pmm.c` 中未声明的 `free_list`、`nr_free` 阻断；因此尚未运行 QEMU 或 `make grade`，也没有记录运行截图或声称动态测试通过。
 
 ---
 
@@ -236,9 +272,10 @@ void exception_handler(struct trapframe *tf);
 | `__alltraps` 符号存在 | 通过 |
 | `__trapret` 符号存在 | 通过 |
 | 恢复顺序检查 | 通过，`sp` 最后恢复 |
-| 完整性 `make` | 待常侯鑫、邓耀飞补充处理函数 |
-| QEMU 运行 | 待集成后执行 |
-| `make grade` | 待集成后执行 |
+| `trap.c` 单文件编译 | 通过：`make -B obj/kern/trap/trap.o` |
+| 完整性 `make` | 未通过：现有 `best_fit_pmm.c` 使用未声明的 `free_list`、`nr_free`，错误与本模块无关 |
+| QEMU 运行 | 尚未运行：全量构建被上述错误阻断 |
+| `make grade` | 尚未运行：全量构建被上述错误阻断 |
 
 汇编验证结果：
 
@@ -248,13 +285,20 @@ void exception_handler(struct trapframe *tf);
 000000000000006a T __trapret
 ```
 
-完整测试截图和 `make grade` 结果待代码集成后补充到 `report/images/` 与 `report/logs/`。
+单文件编译通过，全量构建出现如下错误：
+
+```text
+kern/mm/best_fit_pmm.c: error: 'free_list' undeclared
+kern/mm/best_fit_pmm.c: error: 'nr_free' undeclared
+```
+
+QEMU 测试截图和 `make grade` 结果需待 `best_fit_pmm.c` 构建问题解决、异常处理模块合并后补充，截图保存到 `report/images/`。
 
 ---
 
 ### 中断与时钟测试
 
-待常侯鑫完成 `interrupt_handler()` 后补充：
+中断处理代码已完成；下列项目需在异常处理模块合并后执行并记录实际结果：
 
 - `IRQ_S_TIMER` 是否能持续产生并重新装载下一次时钟事件。
 - `ticks` 是否逐次累加，并在 100 ticks 时输出统计信息。
@@ -288,11 +332,10 @@ make grade
 
 提交前还需完成：
 
-- [ ] 常侯鑫补充中断与时钟模块及测试。
+- [ ] 常侯鑫补充中断模块的 QEMU/评分测试结果。
 - [ ] 邓耀飞补充异常处理模块及测试。
 - [ ] 后续 Prompt 完成后再补入 `report/prompt.md` 和对应模块。
 - [ ] 测试截图放入 `report/images/`。
-- [ ] 测试日志放入 `report/logs/`。
 - [ ] 删除当前仅针对未集成状态的待办说明。
 - [ ] 确认报告中的测试结论全部来自实际运行结果。
 

@@ -6,10 +6,17 @@
 #include <memlayout.h>
 #include <mmu.h>
 #include <riscv.h>
+#include <sbi.h>
 #include <stdio.h>
 #include <trap.h>
 
 #define TICK_NUM 100
+
+/* The handout names this limit; allow the build to override the local default. */
+#ifndef SHUTDOWN_AFTER
+#define SHUTDOWN_AFTER 10
+#endif
+
 
 static void print_ticks() {
     cprintf("%d ticks\n", TICK_NUM);
@@ -80,7 +87,35 @@ void print_regs(struct pushregs *gpr) {
     cprintf("  t6       0x%08x\n", gpr->t6);
 }
 
-//lab3 function2 YOUR CODE
+//lab3 function2 2413603
+void interrupt_handler(struct trapframe *tf) {
+    uintptr_t interrupt = tf->cause & ~((uintptr_t)1 << (sizeof(uintptr_t) * 8 - 1));
+
+    switch (interrupt) {
+    case IRQ_S_SOFT:
+        cprintf("Supervisor software interrupt\n");
+        clear_csr(sip, SIP_SSIP);
+        break;
+    case IRQ_S_TIMER:
+        /* SBI timer events are one-shot; arm the next event before returning. */
+        clock_set_next_event();
+        ticks++;
+        if (ticks % TICK_NUM == 0) {
+            print_ticks();
+            if (ticks / TICK_NUM >= SHUTDOWN_AFTER) {
+                sbi_shutdown();
+            }
+        }
+        break;
+    case IRQ_S_EXT:
+        cprintf("Supervisor external interrupt\n");
+        break;
+    default:
+        cprintf("Unknown interrupt: cause %d\n", (int)interrupt);
+        print_trapframe(tf);
+        break;
+    }
+}
 
 
 static inline void trap_dispatch(struct trapframe *tf) {
