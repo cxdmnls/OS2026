@@ -6,7 +6,7 @@
 |------|------|
 | **实验名称** | Lab3：断，都可以断（Trap、中断与异常处理） |
 | **小组成员** | 2413603-常侯鑫、2411834-张岩、2413404-邓耀飞 |
-| **完成日期** | 2026-10-28 |
+| **完成日期** | 2026-11-05 |
 
 ### 小组分工
 
@@ -21,8 +21,8 @@
 报告分工：
 
 - 张岩：整体逻辑线、第一部分实现、对应 Spec/Prompt、Bug 记录及 OS 原理对照。
-- 常侯鑫：中断与时钟模块的实现、Prompt 和测试记录，待补充。
-- 邓耀飞：异常处理、集成测试和课堂演示部分，待补充并统一整合。
+- 常侯鑫：中断与时钟模块的实现、Prompt 和测试记录。
+- 邓耀飞：异常处理、Lab2 依赖迁入、集成测试和课堂演示。
 
 ---
 
@@ -44,17 +44,17 @@
 |------|------------|---------|------|
 | 2411834-张岩 | Codex | GPT-5 | 用于汇编代码实现、兼容性检查和报告整理 |
 | 2413603-常侯鑫 | 待补充 | 待补充 | 负责中断模块 |
-| 2413404-邓耀飞 | 待补充 | 待补充 | 负责异常、集成与演示 |
+| 2413404-邓耀飞 | Codex | GPT-6 | 负责异常、集成与演示 |
 
 运行及编译环境：
 
 - WSL 下的 GNU/Linux 环境
 - `riscv64-unknown-elf-gcc 14.2.0`
 - GNU Assembler 2.45.50
-- QEMU 4.1.1
+- QEMU 4.1.1（`/opt/qemu-4.1.1/bin/qemu-system-riscv64`，内置 OpenSBI v0.4）
 - 构建命令：`make`
-- 运行命令：`make qemu`
-- 评分命令：`make grade`
+- 运行命令：`make qemu QEMU=/opt/qemu-4.1.1/bin/qemu-system-riscv64`
+- 评分命令：`PATH=/opt/qemu-4.1.1/bin:$PATH make grade`。评分脚本直接调用 `qemu-system-riscv64`，因此需要设置 PATH。系统默认 QEMU 是 10.2.1，本次测试明确使用 4.1.1。
 
 ---
 
@@ -169,14 +169,7 @@ jal trap
 - `trapentry.S` 已能单独编译为目标文件。
 - `nm` 显示 `__alltraps` 和 `__trapret` 符号正确生成。
 - 反汇编确认执行顺序为：恢复 4 个 CSR → 恢复通用寄存器 → 最后恢复 `sp` → `sret`。
-- 当前合并后的完整 `make` 仍因另外两个处理函数尚未实现而停止：
-
-  ```text
-  implicit declaration of function 'interrupt_handler'
-  implicit declaration of function 'exception_handler'
-  ```
-
-  这不是第一部分本身的汇编错误，而是功能模块二尚未接入的预期集成依赖；完整 QEMU 与 `make grade` 验证需在其他成员完成代码后执行。
+- 完成内存管理依赖迁入和异常处理集成后，全量构建通过；评分中的上下文恢复与断点返回项目得到 35/35。
 
 **关键改进点总结：**
 
@@ -240,7 +233,8 @@ Requirements：保留中断原因低位解码；timer 事件必须重新装载�
 
 - `interrupt_handler()` 已实现 timer 重新装载、时钟计数、周期统计、到达阈值后关机，以及软件、外部和未知中断分支。
 - 使用 `make -B obj/kern/trap/trap.o` 单独编译 `trap.c`，编译通过。
-- 全量 `make` 被当前 `best_fit_pmm.c` 中未声明的 `free_list`、`nr_free` 阻断；因此尚未运行 QEMU 或 `make grade`，也没有记录运行截图或声称动态测试通过。
+- 集成时恢复 Lab2 的内存初始化与 Best-Fit 实现后，全量构建通过。
+- QEMU 4.1.1 下连续输出 10 次 `100 ticks` 后正常关机；评分中持续时钟中断项目得到 40/40。
 
 ---
 
@@ -258,86 +252,77 @@ void exception_handler(struct trapframe *tf);
 
 该模块负责按照 `scause` 识别并处理断点异常和非法指令异常。处理时需要输出规定信息，并正确更新 `tf->epc`，使 `sret` 返回后不会再次执行触发异常的指令。对于本实验未单独处理的异常，应调用 `print_trapframe(tf)` 进行兜底。
 
-待负责人完成代码后，在本节补充实际实现过程、最终 Prompt、迭代中遇到的 Bug、断点返回、非法指令返回和未知异常兜底测试结果。
+#### 实现逻辑
+
+`exception_handler()` 根据 `tf->cause` 区分非法指令与断点。两者分别输出 `Illegal instruction at 0x...` 和 `Breakpoint at 0x...`，再读取 `tf->epc` 地址处的第一个 16 位半字：最低两位不为 `11` 时按 2 字节推进，否则按 4 字节推进。当前 RV64GC 实验使用 16 位和 32 位指令，不涉及更长指令扩展。
+
+```c
+uint16_t instruction = *(const volatile uint16_t *)tf->epc;
+tf->epc += (instruction & 3) == 3 ? 4 : 2;
+```
+
+读取半字能够兼容仅按 2 字节对齐的压缩指令。这里要求异常指令所在内核地址可读；本实验没有实现用户地址安全读取。其他异常调用 `print_trapframe(tf)`，保留 `epc`。这一分支用于诊断，不负责修复异常；真实的未解决异常在返回后可能再次触发，不能把“打印现场”理解成自动恢复。评分中未知异常使用人工构造的 Trap frame 直接调用处理函数。
+
+`tf->epc` 是栈上保存的返回地址。C 函数修改它后，`RESTORE_ALL` 会把它写回 `sepc`，最终由 `sret` 跳转。中断处理保留返回地址，异常处理只对实验要求跳过的指令推进返回地址。
+
+#### Spec 的写法
+
+- **前置条件**：`tf` 是有效的 Trap frame，调用者已确认该事件为异常；对于断点和非法指令，`epc` 指向可读取的内核指令。
+- **后置条件**：断点和非法指令输出对应信息，并跳过该条指令；其余寄存器和状态字段保持不变。
+- **断点分支**：识别 `CAUSE_BREAKPOINT`，输出地址，根据实际指令编码推进 `epc`。
+- **非法指令分支**：识别 `CAUSE_ILLEGAL_INSTRUCTION`，输出地址，根据实际指令编码推进 `epc`。
+- **其他异常**：调用现有的现场打印函数，不擅自跳过未知错误。
+- **约束**：保持公开函数签名、Trap frame 布局、已有汇编入口和其他处理函数不变，保留 `lab3` 标记与学号。
+
+#### 集成与调试
+
+初次构建发现 `best_fit_pmm.c` 仅保留框架测试，缺少 `free_area`、分配和释放实现；`pmm.c` 也未补入 `page_init()`。因此从已经完成的 Lab2 分支迁入必要实现，保留 Lab3 新增的保存中断状态、关闭中断、恢复原状态的包装逻辑。默认分配器沿用 Lab3 的 First-Fit，并在临时测试副本中切换 Best-Fit 验证兼容性。
+
+Lab2 使用的 `PHYSICAL_MEMORY_END`、`KERNEL_BEGIN_PADDR` 在 Lab3 未定义，迁入时改用现有宏计算：`KERNTOP - PHYSICAL_MEMORY_OFFSET` 和 `KERNBASE - PHYSICAL_MEMORY_OFFSET`。清理跨分支遗留的目标文件后重新构建，避免使用旧依赖文件。
+
+异常返回验证覆盖压缩断点 `0x9002`、32 位断点 `0x00100073`、16 位非法指令 `0x0000` 和 32 位非法指令 `0x0000007b`。四种指令后均设置成功输出，只有正确返回才能出现对应标记。额外测试在临时副本中注入，不修改评分脚本或正式内核启动流程。
 
 ---
 
 ## 五、测试与验证
 
-当前已完成第一部分的汇编级验证：
+验证日期为 2026-11-05，环境为 WSL Ubuntu、GCC 14.2.0、QEMU 4.1.1。执行命令：
 
-| 检查项 | 结果 |
-|--------|------|
-| `trapentry.S` 单独汇编 | 通过 |
-| `__alltraps` 符号存在 | 通过 |
-| `__trapret` 符号存在 | 通过 |
-| 恢复顺序检查 | 通过，`sp` 最后恢复 |
-| `trap.c` 单文件编译 | 通过：`make -B obj/kern/trap/trap.o` |
-| 完整性 `make` | 未通过：现有 `best_fit_pmm.c` 使用未声明的 `free_list`、`nr_free`，错误与本模块无关 |
-| QEMU 运行 | 尚未运行：全量构建被上述错误阻断 |
-| `make grade` | 尚未运行：全量构建被上述错误阻断 |
-
-汇编验证结果：
-
-```text
-                 U trap
-0000000000000002 T __alltraps
-000000000000006a T __trapret
-```
-
-单文件编译通过，全量构建出现如下错误：
-
-```text
-kern/mm/best_fit_pmm.c: error: 'free_list' undeclared
-kern/mm/best_fit_pmm.c: error: 'nr_free' undeclared
-```
-
-QEMU 测试截图和 `make grade` 结果需待 `best_fit_pmm.c` 构建问题解决、异常处理模块合并后补充，截图保存到 `report/images/`。
-
----
-
-### 中断与时钟测试
-
-中断处理代码已完成；下列项目需在异常处理模块合并后执行并记录实际结果：
-
-- `IRQ_S_TIMER` 是否能持续产生并重新装载下一次时钟事件。
-- `ticks` 是否逐次累加，并在 100 ticks 时输出统计信息。
-- 200 ticks 后内核是否仍能正常返回并继续运行。
-- 软件中断和未知中断是否进入正确的输出分支。
-
----
-
-### 异常处理测试
-
-待邓耀飞完成 `exception_handler()` 后补充：
-
-- 执行断点指令后，`sepc` 是否推进并返回断点后的下一条指令。
-- 执行非法指令后，是否输出异常信息并正确跳过异常指令。
-- 指令长度不同时，`tf->epc` 的推进量是否正确。
-- 未知异常是否调用 `print_trapframe(tf)`，且不会形成异常循环。
-
----
-
-### 最终集成验证
-
-完成 `interrupt_handler()` 和 `exception_handler()` 后，执行：
-
-```text
-make
+```bash
+cd /mnt/d/Desktop/CODE/os/OS2026/code
+export PATH=/opt/qemu-4.1.1/bin:$PATH
+make clean
+make -j2
 make qemu
 make grade
+python3 tools/check_lab3_extra.py
 ```
 
-最终需要记录 Trap 上下文与断点返回、非法指令异常返回、持续时钟中断三组测试结果及总分。同时检查所有成员模块合并后仍保留对应的 `lab3` 注释和各自学号。
+| 检查项 | 实际结果 |
+|--------|----------|
+| 全量构建 | 通过 |
+| 默认 First-Fit 的内存自检 | 通过 |
+| QEMU 普通启动 | 连续 10 次 `100 ticks`，随后正常关机 |
+| Trap 入口、寄存器恢复和断点返回 | 35/35 |
+| 非法指令返回和处理函数兜底 | 25/25 |
+| 持续时钟中断和重复返回 | 40/40 |
+| 总分 | **100/100** |
+| 2 字节、4 字节断点返回 | 均通过 |
+| 2 字节、4 字节非法指令返回 | 均通过 |
+| 临时切换 Best-Fit 后的内存自检和四类异常返回 | 均通过 |
 
-提交前还需完成：
+日志：[普通启动](logs/lab3-qemu.txt)、[评分结果摘要](logs/lab3-grade.txt)、[额外集成测试完整输出](logs/lab3-extra.txt)。评分使用原有 `make grade`，未修改测试与评分标准。现有汇编验证日志保留在 `logs/trapentry-verify.txt`。
 
-- [ ] 常侯鑫补充中断模块的 QEMU/评分测试结果。
-- [ ] 邓耀飞补充异常处理模块及测试。
-- [ ] 后续 Prompt 完成后再补入 `report/prompt.md` 和对应模块。
-- [ ] 测试截图放入 `report/images/`。
-- [ ] 删除当前仅针对未集成状态的待办说明。
-- [ ] 确认报告中的测试结论全部来自实际运行结果。
+### 课堂演示步骤
+
+1. 在 VS Code 的 WSL 终端进入 `code`，执行上述 PATH 设置，运行 `qemu-system-riscv64 --version`，确认 4.1.1。
+2. 执行 `make clean && make -j2`，展示构建通过。
+3. 执行 `make qemu`，指出内存自检成功、时钟初始化、连续统计输出及自动关机。
+4. 执行 `make grade`，展示三个项目通过与 `100/100`。该命令会在临时副本中注入异常和上下文测试。
+5. 执行 `python3 tools/check_lab3_extra.py`，展示不同指令长度和两种分配器下的返回结果。
+6. 讲解 `__alltraps → trap → trap_dispatch → exception_handler → __trapret → sret`，说明修改 `tf->epc` 如何影响最后的返回地址，以及为什么不能提前恢复 `sp`。
+
+普通启动主要展示时钟路径，异常返回由评分和额外测试主动触发。当前 Trap 来自内核 S 模式，`sret` 按 `sstatus.SPP` 返回，不能认为它总是返回 U 模式。
 
 ---
 
@@ -366,7 +351,7 @@ OS 原理中重要但本实验没有完整覆盖的内容：
 
 这次实现说明，对底层汇编而言，Prompt 不能只写“实现某某函数”，还必须把数据结构布局、寄存器含义、调用约定和不可修改范围明确写进 `[RELY]` 与 `[SPECIFICATION]`。尤其是 `sp` 恢复顺序和 CPU 工具链名称这类细节，单靠函数名无法推断。
 
-AI 生成的代码仍需人工检查实际反汇编和构建结果。发现 `sbadaddr` 兼容问题后，不能直接忽略编译错误，也不能擅自改变 trapframe 布局，而应确认 CSR 编号和语义后再做兼容处理。当前报告只记录已完成的汇编验证；最终测试结论需在另外两个功能模块集成后补充。
+AI 生成的代码仍需人工检查实际反汇编和构建结果。发现 `sbadaddr` 兼容问题后，不能直接忽略编译错误，也不能擅自改变 trapframe 布局，而应确认 CSR 编号和语义后再做兼容处理。最终通过原有评分及额外的指令长度测试确认完整执行流，报告中的测试结论均来自实际运行。
 
 ## 参考资料
 

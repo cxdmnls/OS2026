@@ -81,7 +81,62 @@ size_t nr_free_pages(void) {
     return ret;
 }
 
-//lab2 请补充你在lab2中的代码
+//lab2 function1 2413603
+static void page_init(void) {
+    extern char end[];
+    uint64_t mem_base = get_memory_base();
+    uint64_t mem_size = get_memory_size();
+
+    // nbase and the boot page table assume that RAM starts at DRAM_BASE.
+    // Reject invalid DTB data before doing address arithmetic or touching RAM.
+    if (mem_base != DRAM_BASE || mem_size == 0 ||
+        mem_size > (uint64_t)-1 - mem_base) {
+        panic("page_init: invalid DTB memory range");
+    }
+    uintptr_t detected_end = mem_base + mem_size;
+    uintptr_t managed_end = detected_end;
+    if (managed_end > (KERNTOP - PHYSICAL_MEMORY_OFFSET)) {
+        managed_end = (KERNTOP - PHYSICAL_MEMORY_OFFSET);
+    }
+    managed_end = ROUNDDOWN(managed_end, PGSIZE);
+    if (managed_end <= (KERNBASE - PHYSICAL_MEMORY_OFFSET)) {
+        panic("page_init: memory does not cover the kernel");
+    }
+
+    va_pa_offset = PHYSICAL_MEMORY_OFFSET;
+    npage = PPN(managed_end);
+    // pages[0] describes DRAM_BASE, not physical address zero.
+    uintptr_t descriptors_pa = PADDR(ROUNDUP((uintptr_t)end, PGSIZE));
+    size_t descriptor_bytes = (npage - nbase) * sizeof(struct Page);
+    if (descriptors_pa < (KERNBASE - PHYSICAL_MEMORY_OFFSET) ||
+        descriptors_pa >= managed_end ||
+        descriptor_bytes > managed_end - descriptors_pa) {
+        panic("page_init: no room for page descriptors");
+    }
+    pages = (struct Page *)(descriptors_pa + va_pa_offset);
+
+    // Reserve everything first; only the explicitly registered free range
+    // below may be released by the selected allocator's init_memmap().
+    for (size_t i = 0; i < npage - nbase; i++) {
+        pages[i].flags = 0;
+        SetPageReserved(&pages[i]);
+        pages[i].property = 0;
+        set_page_ref(&pages[i], 0);
+        list_init(&pages[i].page_link);
+    }
+
+    uintptr_t free_begin = ROUNDUP(descriptors_pa + descriptor_bytes, PGSIZE);
+    cprintf("physical memory: [0x%016lx, 0x%016lx)\n", mem_base, detected_end);
+    cprintf("managed memory:  [0x%016lx, 0x%016lx)\n", mem_base, managed_end);
+    cprintf("page descriptors: [0x%016lx, 0x%016lx)\n",
+            descriptors_pa, descriptors_pa + descriptor_bytes);
+    cprintf("free memory:     [0x%016lx, 0x%016lx), %lu pages\n",
+            free_begin, managed_end, (managed_end - free_begin) / PGSIZE);
+    if (free_begin < managed_end) {
+        init_memmap(pa2page(free_begin), (managed_end - free_begin) / PGSIZE);
+    }
+}
+
 
 /* pmm_init - initialize the physical memory management */
 void pmm_init(void) {

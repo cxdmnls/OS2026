@@ -1,0 +1,11 @@
+Command: PATH=/opt/qemu-4.1.1/bin:/usr/bin:/bin make grade
+Environment: WSL Ubuntu, QEMU 4.1.1, GCC 14.2.0
+Date: 2026-11-05
+
+lab3 injection complete
+  - trap entry, register restore, and breakpoint EPC: PASS (35/35)
+  - illegal instruction EPC advance and return: PASS (25/25)
+  - re-armed supervisor timer and repeated trap return: PASS (40/40)
+Total Score: 100/100
+
+Summary transcribed from the actual make grade output; repetitive compiler lines omitted.

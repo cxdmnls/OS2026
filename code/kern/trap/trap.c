@@ -118,6 +118,29 @@ void interrupt_handler(struct trapframe *tf) {
 }
 
 
+//lab3 function3 2413404
+void exception_handler(struct trapframe *tf) {
+    switch (tf->cause) {
+    case CAUSE_ILLEGAL_INSTRUCTION:
+    case CAUSE_BREAKPOINT: {
+        if (tf->cause == CAUSE_ILLEGAL_INSTRUCTION) {
+            cprintf("Illegal instruction at 0x%016lx\n", tf->epc);
+        } else {
+            cprintf("Breakpoint at 0x%016lx\n", tf->epc);
+        }
+        /* Read a halfword: compressed instructions need only 2-byte alignment.
+         * This lab runs RV64GC, whose instructions are 16 or 32 bits. */
+        uint16_t instruction = *(const volatile uint16_t *)tf->epc;
+        tf->epc += (instruction & 3) == 3 ? 4 : 2;
+        break;
+    }
+    default:
+        /* Unhandled exceptions have no recovery policy in this lab. */
+        print_trapframe(tf);
+        break;
+    }
+}
+
 static inline void trap_dispatch(struct trapframe *tf) {
     if ((intptr_t)tf->cause < 0) {
         // interrupts
