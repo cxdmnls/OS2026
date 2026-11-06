@@ -3,3 +3,5 @@
 /code/.gdb.in
 /code/.qemu.out
 __pycache__/
+/code/tools/check_lab3_extra.py
+/report/logs/
