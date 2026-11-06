@@ -140,6 +140,66 @@ jal trap
 - **边界和约束**：不能覆盖已有 trapframe；不能提前修改 `sp`；不能改变 `SAVE_ALL`、`struct trapframe` 或 `trap()` 的接口。
 - **可验证点**：汇编可以单独生成目标文件；`__alltraps` 和 `__trapret` 符号存在；反汇编显示 `x2` 是最后一个通用寄存器，随后执行 `sret`。
 
+#### 最终提示词
+
+完整的设计思考与 Prompt 同步保存在 [`prompt.md`](prompt.md)。核心 Prompt 如下：
+
+````markdown
+[PROMPT]
+**任务**：修改 `code/kern/trap/trapentry.S`，完成 Trap 上下文恢复与 Trap 入口功能。
+
+**操作要求**：必须在项目中修改实际文件，而不是只输出代码片段。保留已有 `SAVE_ALL`、`struct trapframe`、`trap()` 函数签名及其他无关代码，只在两个 `lab3 function1` 标记处补全 `RESTORE_ALL` 和 `__alltraps`；保留 `lab3 function1` 注释，并将 `YOUR CODE` 替换为学号 `2411834`。
+
+**输出要求**：以当前工程的真实宏、寄存器名称和结构体布局为准，直接修改文件。实现应能形成“Trap 进入 → SAVE_ALL → 调用 trap(tf) → RESTORE_ALL → sret”的完整闭环。
+
+[RELY]
+- `struct trapframe` 由偏移 0～31 的通用寄存器、偏移 32 的 `sstatus`、偏移 33 的 `sepc`、偏移 34 的 `sbadaddr/stval` 和偏移 35 的 `scause` 组成。
+- `SAVE_ALL` 分配 `36 * REGBYTES`，把原 `sp` 经 `sscratch` 保存到偏移 `2 * REGBYTES`。
+- `REGBYTES`、`STORE`、`LOAD` 来自 `libs/riscv.h`。
+- `void trap(struct trapframe *tf)` 是 C 语言处理接口，第一个整数参数寄存器为 `a0`。
+- 当前 GNU Assembler 2.45 使用新 CSR 名称 `stval`，框架保留旧名称 `sbadaddr`。
+
+[GUARANTEE]
+```asm
+RESTORE_ALL
+__alltraps
+```
+
+不得修改 `SAVE_ALL` 的保存布局、`struct trapframe`、`trap()` 签名以及 `__trapret` 和 `sret` 的返回职责。
+
+[SPECIFICATION]
+## RESTORE_ALL
+**Pre-Condition**：
+- `sp` 指向由 `SAVE_ALL` 创建的完整 trapframe。
+
+**Post-Condition**：
+- 四个 CSR 和除 `x0` 外的通用寄存器恢复到 Trap 发生前的值。
+- 原 `sp` 恢复成功，后续 `sret` 能回到正确执行流。
+
+**Case 1**：
+- 先恢复 CSR 和 `x1`、`x3`～`x31`，最后恢复 `x2(sp)`，保证此前加载仍使用 trapframe 基址。
+
+**Case 2**：
+- `x0` 保持硬连线零，不执行错误的显式恢复。
+
+**Requirements**：
+- 不得提前修改 `sp`，不得改变 36 项布局，不得覆盖 trapframe 以外的栈数据。
+- 旧 `sbadaddr` 名称需要兼容当前汇编器的 `stval`，但 CSR 编号和语义不能改变。
+
+## __alltraps
+**Pre-Condition**：
+- 硬件已经跳转到 `stvec` 指定的统一入口。
+
+**Post-Condition**：
+- `SAVE_ALL` 已建立 trapframe，并将 trapframe 地址通过 `a0` 传给 `trap(tf)`。
+- `trap()` 返回后进入 `__trapret`，执行 `RESTORE_ALL` 和 `sret`。
+
+**Requirements**：
+- `__alltraps` 必须 4 字节对齐。
+- `jal trap` 返回后应直接衔接 `__trapret`。
+- 本章 Prompt 只负责底层入口和恢复，不处理中断分类、时钟计数或异常返回地址修正。
+````
+
 #### 实现迭代过程
 
 本模块实现和验证经历了两次主要迭代。
