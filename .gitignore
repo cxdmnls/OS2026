@@ -1,0 +1,9 @@
+/code/obj/
+/code/bin/
+/code/.gdb.in
+/code/.qemu.out
+/code/.*.log
+/code/.idea/
+/code/cmake-build-*/
+/report/logs/
+__pycache__/
