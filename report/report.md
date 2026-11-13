@@ -6,7 +6,7 @@
 |------|------|
 | **实验名称** | Lab4：进程管理 |
 | **小组成员** | 2413603-常侯鑫、2411834-张岩、2413404-邓耀飞 |
-| **完成日期** | 实验进行中，完成后记录实际日期 |
+| **完成日期** | 2026-11-13 |
 
 ### 小组分工
 
@@ -31,7 +31,7 @@
 | 成员 | AI 编程工具 | 底层模型 | 备注 |
 |------|------------|---------|------|
 | 2413603-常侯鑫 | Codex | GPT-6.1 Sol | 依赖迁入与页映射模块 |
-| 2411834-张岩 | Codex | GPT-5 | 进程创建与初始化模块 |
+| 2411834-张岩 | Codex | DeepSeek V4 Flash | 进程创建与初始化模块 |
 | 2413404-邓耀飞 | Codex | GPT-6 | 调度与上下文切换模块、中断保存与恢复思考题、集成验证 |
 
 采用 WSL Ubuntu 24.04、GNU Make 与 RISC-V 交叉编译工具。目标文件检查使用系统 GCC 13.2.0；模块动态验证启用已有课程工具环境，使用 QEMU 4.1.1 和 OpenSBI v0.4。最终集成应保持工具配置一致。
@@ -112,15 +112,43 @@ void page_remove(pde_t *pgdir, uintptr_t la);
 
 #### 模块功能描述
 
-需要实现 alloc_proc、proc_init、kernel_thread、do_fork、copy_thread、copy_mm。
+本模块位于 `code/kern/process/proc.c`，保留 `//LAB4 function2 2411834` 标记，实现 `alloc_proc`、`proc_init`、`kernel_thread`、`do_fork`、`copy_thread` 和 `copy_mm`。它负责把内核从“只能顺序执行初始化代码”推进到“具有线程控制块、内核栈、首次运行现场和可登记的新内核线程”。
+
+`struct proc_struct` 是本实验的进程控制块，也承担内核线程控制块的作用。`state` 和 `need_resched` 描述线程是否可参与调度；`pid`、`parent`、`list_link` 和 `hash_link` 用于身份、父子关系及两类索引；`kstack` 保存独立内核栈的虚拟地址；`context` 保存切换后继续执行的入口和栈；`tf` 保存一次完整 Trap 现场；`mm` 和 `pgdir` 描述地址空间。Lab4 的内核线程共享内核页表，因此 `mm` 为空，`pgdir` 统一设置为 Sv39 页表根的物理地址 `boot_pgdir_pa`。
+
+`alloc_proc()` 通过 `kmalloc()` 创建 PCB。所有会影响后续资源管理的字段都显式初始化：状态为 `PROC_UNINIT`，pid 为 -1，父进程、内存管理结构和 trapframe 为空，切换上下文清零，名称清零，链表节点完成自环初始化。`proc_init()` 初始化进程链表和 pid 哈希桶，再把当前初始化现场包装为 pid 0 的 `idleproc`。该线程直接复用 `bootstack`，将 `need_resched` 置 1，并把 `current` 指向自身。随后 `kernel_thread()` 创建 pid 1 的 `initproc`。
+
+`kernel_thread()` 先构造临时 trapframe。`gpr.s0` 保存目标函数，`gpr.s1` 保存参数，`epc` 指向 `kernel_thread_entry`。`sstatus` 中设置 `SPP`，使 `sret` 返回 Supervisor 模式；设置 `SPIE` 以保留返回后的中断使能模板；清除 `SIE`，确保首次上下文尚未完全建立时不会提前进入中断。临时 trapframe 交给 `do_fork()` 后，`alloc_proc()`、`setup_kstack()`、`copy_mm()` 和 `copy_thread()` 共同完成 PCB、两页内核栈、地址空间和首次运行现场。
+
+`copy_thread()` 把 trapframe 放在新内核栈顶端，把子线程的 `a0` 清零，并让 `gpr.sp` 指向新线程可用的内核栈。`context.ra` 指向 `forkret`，`context.sp` 指向 trapframe。`do_fork()` 在中断保护区内分配 pid、加入 pid 哈希桶和进程链表，最后调用 `wakeup_proc()` 将线程设为 `PROC_RUNNABLE`。本阶段 `copy_mm()` 不复制用户地址空间，只检查当前内核线程没有 `mm`，并让新线程继续共享内核地址空间。
+
+内核线程首次运行的调用链如下：
+
+```text
+schedule
+  -> proc_run
+  -> switch_to(load context.ra/context.sp)
+  -> forkret
+  -> forkrets(current->tf)
+  -> __trapret
+  -> sret(sepc=kernel_thread_entry)
+  -> kernel_thread_entry
+  -> fn(arg)
+```
+
+这条链把两类上下文区分得很清楚：`struct context` 只覆盖普通函数之间的线程切换，`struct trapframe` 则覆盖 RISC-V 的寄存器、`sstatus` 和 `sepc` 恢复。`kernel_thread_entry` 把 `s1` 中的参数移入 `a0`，再跳转到 `s0` 保存的函数指针。`forkrets` 把 trapframe 地址放入 `sp`，`__trapret` 恢复全部寄存器和四个 CSR，最后由 `sret` 进入预定入口。
 
 #### 最终提示词
 
-由负责人在实际实现时记录。
+完整结构化 Prompt 见 [prompt.md](prompt.md) 的“张岩：进程创建与初始化”。其中 `[RELY]` 明确 PCB 字段、页表物理地址、内核栈、`context` 与 `trapframe` 的关系，以及 `sstatus.SPP/SPIE/SIE` 的含义；`[GUARANTEE]` 固定六个函数接口和允许修改的范围；`[SPECIFICATION]` 分别规定 PCB 初始化、idleproc、initproc、首次运行现场、并发登记和失败清理的可观察结果。
 
 #### 实现迭代过程
 
-该模块尚未开展实现与动态验证。
+实现中首先检查了 `boot_pgdir_va` 和 `boot_pgdir_pa` 的区别。进程切换最终需要把页表根物理页号写入 `satp`，因此 PCB 不能保存内核虚拟地址。其次检查了 RISC-V 的首次启动栈：`__trapret` 会恢复 trapframe 中保存的 `sp`，所以内核线程不能沿用“参数 stack 为 0”的旧习惯，而应在 `copy_thread()` 中回退到新线程的内核栈。
+
+失败路径按资源取得顺序逆序清理：内核栈分配失败时释放 PCB；地址空间初始化失败时先释放内核栈、再释放 PCB。pid/链表/哈希登记的复合更新放入 `local_intr_save/restore` 临界区，避免同一时刻观察到只完成一半的进程登记状态。
+
+`proc.c` 已通过 RISC-V 交叉编译器对象级构建。完整线程启动还依赖模块三的 `schedule()`、`proc_run()` 和 `switch_to()`；模块二验收与整组最终评分在第五节分别记录，不把对象编译通过描述成 QEMU 全流程通过。
 
 ### 功能模块三：调度与上下文切换
 
@@ -182,7 +210,7 @@ make -j2 obj/kern/mm/pmm.o obj/kern/mm/default_pmm.o obj/kern/trap/trap.o obj/ke
 
 2026-11-11 执行结果：四个目标文件均编译成功；出现 WSL 文件时间偏差警告。此检查仅证明迁入文件可编译，不代表完整内核链接或运行通过。
 
-模块一已实现并通过 `make -B obj/kern/mm/pmm.o` 强制编译。进程创建和调度仍待其他成员完成，完整 `make grade` 尚未运行，不能将模块检查等同于总分通过。截图将在实际运行后保存到 images/ 并引用。
+模块一已实现并通过 `make -B obj/kern/mm/pmm.o` 强制编译。完整评分仍需三个模块在同一份源码中集成，不能将单个模块检查等同于整组总分通过。
 
 2026-11-11 在临时源码副本中隔离尚未完成的线程入口，以框架原有 `test_lab4_pmm_basic()` 验证模块一；仓库的启动流程、评分工具和测试文件保持不变。使用 QEMU 4.1.1、OpenSBI v0.4，通过 `-kernel bin/ucore.img` 启动临时镜像。结果如下：
 
@@ -200,6 +228,38 @@ make -j2 obj/kern/mm/pmm.o obj/kern/mm/default_pmm.o obj/kern/trap/trap.o obj/ke
 
 分配失败检查仅在临时副本中运行，没有向仓库加入自编测试脚本。系统默认的较新 OpenSBI 环境未成功进入内核；启用课程环境后模块验证通过，因此最终集成需先确认使用课程工具。
 
+模块二于 2026-11-13 先执行：
+
+```bash
+make -B obj/kern/process/proc.o
+```
+
+`proc.c` 在 `riscv64-unknown-elf-gcc 14.2.0` 下无警告通过编译。随后在独立临时副本中接入只用于验证的最小调度与上下文切换实现，并运行课程 `tools/inject.py` 注入原有测试。临时实现未写入 `lab4_new`，正式模块三仍由 2413404-邓耀飞完成。QEMU 4.1.1、OpenSBI v0.4 的实际输出如下：
+
+```text
+[Test PMM] PASS
+check_vma_struct() succeeded!
+check_vmm() succeeded.
+[Test Process Create] PASS
+[Test Schedule] PASS
+this initproc, pid = 1, name = "init"
+To U: "Hello world!!".
+To U: "en.., Bye, Bye. :)".
+```
+
+| 模块二检查 | 实际结果 |
+|------------|----------|
+| `proc.c` RISC-V 交叉编译 | 通过 |
+| PCB 基础字段与 `pgdir` 初始化 | 通过 |
+| `idleproc` 的 pid、状态、内核栈和父进程字段 | 通过 |
+| `initproc` 的 pid、父进程、context 与 trapframe | 通过 |
+| pid 分配、哈希桶和进程链表登记 | 通过 |
+| `initproc` 经首次运行链输出三行文本 | 通过 |
+| 两个附加内核线程均可运行和切换 | 通过 |
+| 整组 `make grade` | 待模块三正式实现后执行 |
+
+临时集成发现当前 WSL 的 GCC 14 对框架 `tools/test_lab4.c` 中 `void (*)(void *)` 与 `kernel_thread` 的 `int (*)(void *)` 参数执行严格类型检查，原有评分注入测试不能直接编译；同一工具链还会拒绝 `kern/mm/kmalloc.c` 中缺少 `void *` 强制转换的旧写法。为验证模块二，只在临时副本中做了兼容调整，没有修改仓库评分工具或测试标准。正式集成时应统一课程工具链或由模块三负责人处理这些框架兼容问题。
+
 ---
 
 ## 六、实验总结与收获
@@ -208,6 +268,22 @@ make -j2 obj/kern/mm/pmm.o obj/kern/mm/default_pmm.o obj/kern/trap/trap.o obj/ke
 
 页表是虚拟地址映射的数据结构，TLB 是硬件地址翻译缓存；修改页表后需要使旧缓存失效。PCB 管理线程状态和资源，context 只保存切换执行流所需的寄存器。本实验以内核线程为主，尚未覆盖完整用户程序加载、文件系统和多核调度。
 
+模块二涉及的核心知识点及其与操作系统原理的对应关系如下：
+
+| 本实验机制 | OS 原理知识点 | 关系与差异 |
+|------------|---------------|------------|
+| `proc_struct` | PCB/TCB | PCB 统一管理身份、状态、栈、地址空间和链接信息。本实验的独立内存资源较少，因此同一结构也直接充当内核线程控制块。 |
+| `proc_list` 与 `hash_list` | 进程索引与生命周期管理 | 线性链表用于遍历和调度，pid 哈希桶用于平均常数时间查找；本实验尚未实现完整退出、等待和回收。 |
+| 两页内核栈 | 特权级切换与内核栈 | 每个线程保存自己的内核栈，Trap 和内核函数调用使用该栈；此时用户栈和内核栈切换尚未完整实现。 |
+| `struct context` | CPU 上下文切换 | 只保存被调用者保存寄存器，调用者保存寄存器由编译器在普通函数调用边界处理，因此比完整进程上下文轻量。 |
+| `struct trapframe` | 硬件现场与异常返回 | 保存全部通用寄存器、`sstatus`、`sepc` 等，可供 `sret` 恢复；它不包含页表、文件等软件资源。 |
+| `forkret -> forkrets -> __trapret` | 新执行流的首次启动 | 通过“切换上下文到恢复 Trap 现场”的通用路径启动新线程，无需为 `kernel_thread_entry` 另写一套进入逻辑。 |
+| `copy_mm()` 占位 | 地址空间复制/隔离 | 真正进程还需要复制或共享页表、维护 VMA 和引用计数；本实验的内核线程共享内核页表，故只保留接口。 |
+
+本实验尚未覆盖但 OS 原理中重要的内容包括：用户态进程的完整创建与 `fork` 语义、写时复制、独立页表切换的完整验证、进程退出后的僵尸态回收和父进程等待、文件描述符继承、信号机制、多核调度与锁，以及睡眠/唤醒和公平调度策略。
+
 ### AI 协作开发的经验
+
+模块二的调试重点是上下文链而不是单个函数：PCB 字段正确不代表线程一定能启动，还需要核对 `boot_pgdir_pa`、新线程 trapframe 的落点、`context.ra`、`context.sp`、`sstatus` 和 `sp` 恢复顺序。临时集成中先通过原有 `Process Create` 测试确认对象状态，再利用附加线程确认首次运行链，从而把“能分配 PCB”和“能真正执行内核线程”分开验证。
 
 跨实验迁入需明确数据结构变化和框架保留范围，并使用编译结果核对接口兼容性，不能将旧实验文件直接整体覆盖。

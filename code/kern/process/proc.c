@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <riscv.h>
 
 /* ------------- process/thread mechanism design&implementation -------------
 (an simplified Linux process/thread mechanism )
@@ -218,7 +219,167 @@ init_main(void *arg)
     return 0;
 }
 
-//LAB4 function2 YOUR CODE
+//LAB4 function2 2411834
+// alloc_proc - allocate and initialize a process control block
+static struct proc_struct *
+alloc_proc(void)
+{
+    struct proc_struct *proc = kmalloc(sizeof(struct proc_struct));
+    if (proc == NULL)
+    {
+        return NULL;
+    }
+
+    proc->state = PROC_UNINIT;
+    proc->pid = -1;
+    proc->runs = 0;
+    proc->kstack = 0;
+    proc->need_resched = 0;
+    proc->parent = NULL;
+    proc->mm = NULL;
+    memset(&proc->context, 0, sizeof(proc->context));
+    proc->tf = NULL;
+    // satp contains a physical page number, not a kernel virtual pointer.
+    proc->pgdir = boot_pgdir_pa;
+    proc->flags = 0;
+    memset(proc->name, 0, sizeof(proc->name));
+    list_init(&proc->list_link);
+    list_init(&proc->hash_link);
+    return proc;
+}
+
+// copy_mm - this lab only creates kernel threads, which share the kernel mm.
+static int
+copy_mm(uint32_t clone_flags, struct proc_struct *proc)
+{
+    (void)clone_flags;
+    assert(current->mm == NULL);
+    proc->mm = NULL;
+    return 0;
+}
+
+// copy_thread - place the child's trapframe and first-run context on its stack
+static void
+copy_thread(struct proc_struct *proc, uintptr_t esp, struct trapframe *tf)
+{
+    proc->tf = (struct trapframe *)(proc->kstack + KSTACKSIZE) - 1;
+    *(proc->tf) = *tf;
+
+    // A new thread receives 0 from fork; kernel threads use their kernel stack.
+    proc->tf->gpr.a0 = 0;
+    proc->tf->gpr.sp = (esp != 0) ? esp : (uintptr_t)proc->tf;
+
+    // switch_to returns to forkret, which restores the prepared trapframe.
+    proc->context.ra = (uintptr_t)forkret;
+    proc->context.sp = (uintptr_t)proc->tf;
+}
+
+// kernel_thread - create a kernel thread starting at fn(arg)
+int
+kernel_thread(int (*fn)(void *), void *arg, uint32_t clone_flags)
+{
+    struct trapframe tf;
+
+    memset(&tf, 0, sizeof(tf));
+    tf.gpr.s0 = (uintptr_t)fn;
+    tf.gpr.s1 = (uintptr_t)arg;
+    tf.epc = (uintptr_t)kernel_thread_entry;
+
+    // Return to supervisor mode with a clean interrupt-enable template.
+    tf.status = read_csr(sstatus);
+    tf.status |= SSTATUS_SPP;
+    tf.status |= SSTATUS_SPIE;
+    tf.status &= ~SSTATUS_SIE;
+
+    return do_fork(CLONE_VM | clone_flags, 0, &tf);
+}
+
+// do_fork - create, register and wake the child process/thread
+int
+do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf)
+{
+    int ret = -E_NO_MEM;
+    struct proc_struct *proc;
+
+    if (nr_process >= MAX_PROCESS)
+    {
+        return -E_NO_FREE_PROC;
+    }
+    if ((proc = alloc_proc()) == NULL)
+    {
+        goto fork_out;
+    }
+
+    proc->parent = current;
+    if ((ret = setup_kstack(proc)) != 0)
+    {
+        goto bad_fork_cleanup_proc;
+    }
+    if ((ret = copy_mm(clone_flags, proc)) != 0)
+    {
+        goto bad_fork_cleanup_kstack;
+    }
+    copy_thread(proc, stack, tf);
+
+    bool intr_flag;
+    local_intr_save(intr_flag);
+    {
+        proc->pid = get_pid();
+        hash_proc(proc);
+        list_add(&proc_list, &proc->list_link);
+        nr_process++;
+    }
+    local_intr_restore(intr_flag);
+
+    wakeup_proc(proc);
+    ret = proc->pid;
+    goto fork_out;
+
+bad_fork_cleanup_kstack:
+    put_kstack(proc);
+bad_fork_cleanup_proc:
+    kfree(proc);
+fork_out:
+    return ret;
+}
+
+// proc_init - initialize idleproc and create the first kernel thread
+void
+proc_init(void)
+{
+    int i;
+
+    list_init(&proc_list);
+    for (i = 0; i < HASH_LIST_SIZE; i++)
+    {
+        list_init(hash_list + i);
+    }
+
+    if ((idleproc = alloc_proc()) == NULL)
+    {
+        panic("cannot alloc idleproc!\n");
+    }
+
+    // idleproc reuses the kernel's existing boot stack and execution context.
+    idleproc->pid = 0;
+    idleproc->state = PROC_RUNNABLE;
+    idleproc->kstack = (uintptr_t)bootstack;
+    idleproc->need_resched = 1;
+    set_proc_name(idleproc, "idle");
+    nr_process++;
+
+    current = idleproc;
+    list_add(&proc_list, &idleproc->list_link);
+
+    int pid = kernel_thread(init_main, "Hello world!!", 0);
+    if (pid <= 0)
+    {
+        panic("create init_main failed.\n");
+    }
+
+    initproc = find_proc(pid);
+    set_proc_name(initproc, "init");
+}
 
 
 //LAB4 function3 YOUR CODE

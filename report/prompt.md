@@ -76,3 +76,61 @@ void page_remove(pde_t *pgdir, uintptr_t la);
 
 **Requirements**：验证须对应上述结果，包括同页更新、共享页替换、重复删除和中间页表分配失败。区分编译检查、模块运行和完整评分，仅报告实际结果。实现顺序和内部辅助结构由实现者选择，不用伪代码代替功能需求。
 
+## 张岩：进程创建与初始化
+
+以下为模块二实际使用并整理后的结构化 Prompt。
+
+[PROMPT]
+
+在现有 Lab4/RISC-V uCore 框架中实现模块二“进程创建与初始化”。只修改 `code/kern/process/proc.c` 的模块二位置，完成 `alloc_proc`、`proc_init`、`kernel_thread`、`do_fork`、`copy_thread` 和 `copy_mm`，并保留 `//LAB4 function2 2411834` 标记。完成后内核应能创建 `idleproc` 与 `initproc`，新线程能够沿 `switch_to -> forkret -> forkrets -> __trapret -> kernel_thread_entry -> fn(arg)` 的首次运行链路进入目标函数。不得修改调度、上下文切换、页映射、评分工具和测试文件。
+
+[RELY]
+
+- `struct proc_struct` 是进程/线程控制块。`state`、`pid`、`parent`、`kstack`、`mm`、`context`、`tf`、`pgdir`、`name`、`list_link` 和 `hash_link` 共同描述线程状态、资源和调度信息；刚分配但尚未登记的 PCB 必须完成逐字段初始化。
+- `idleproc` 不是由普通 `fork` 复制出的线程，而是把调用 `proc_init` 时的执行现场包装成 pid 为 0 的内核线程。它使用启动阶段的 `bootstack`，并由 `need_resched = 1` 触发第一次调度。
+- 内核线程共享内核地址空间。`boot_pgdir_pa` 是 SV39 页表根的物理地址，可直接交给 `satp`；不能把 `boot_pgdir_va` 当作页表物理基址。
+- `alloc_pages(KSTACKPAGE)` 返回连续物理页，`page2kva()` 得到其内核虚拟地址。新线程的 trapframe 位于 `kstack + KSTACKSIZE` 下方，`context.sp` 指向该 trapframe。
+- `struct context` 只保存切换所需的 `ra`、`sp` 和 `s0` 至 `s11`。新线程的 `context.ra` 设置为 `forkret`；切换后由 `forkret` 恢复 `current->tf`。
+- `forkrets` 把 `a0` 中的 trapframe 地址装入 `sp`，再跳转到 `__trapret`。恢复寄存器后执行 `sret`，使用 trapframe 中的 `sepc` 与 `sstatus` 进入首次运行入口。
+- `kernel_thread_entry` 把 `s1` 中的参数移入 `a0`，再通过 `s0` 跳转目标函数。因此模板 trapframe 必须把函数指针放在 `gpr.s0`、参数放在 `gpr.s1`，把 `epc` 设为 `kernel_thread_entry`。
+- `sstatus.SPP` 决定 `sret` 返回的特权级，内核线程应返回 Supervisor 模式；`SSTATUS_SPIE` 保存进入时允许中断的状态，模板中应清除 `SSTATUS_SIE`，避免在上下文尚未完全建立时被中断。
+- `get_pid()` 依赖 `proc_list` 分配唯一 pid；`hash_proc()` 把已分配 pid 的 PCB 加入哈希桶；`wakeup_proc()` 把非僵尸、非就绪线程改为 `PROC_RUNNABLE`。
+- `do_exit` 仍为框架占位实现，本次不扩展退出回收逻辑。
+
+[GUARANTEE]
+
+提供并保持以下接口：
+
+```c
+static struct proc_struct *alloc_proc(void);
+void proc_init(void);
+int kernel_thread(int (*fn)(void *), void *arg, uint32_t clone_flags);
+int do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf);
+static void copy_thread(struct proc_struct *proc, uintptr_t esp, struct trapframe *tf);
+static int copy_mm(uint32_t clone_flags, struct proc_struct *proc);
+```
+
+允许增加内部失败清理标签，但不得改变现有头文件接口、进程状态枚举、`proc_struct` 字段或其他成员已经完成的功能。
+
+[SPECIFICATION]
+
+**Pre-Condition**：`kmalloc`、物理页分配器和 `boot_pgdir_pa` 已初始化；调用 `proc_init()` 时当前执行现场可作为一个内核线程；模块三最终提供 `schedule()`、`proc_run()` 和 `switch_to()`。
+
+**Post-Condition**：`proc_list` 与 1024 个 pid 哈希桶已初始化；`idleproc` 的 pid 为 0、状态为 `PROC_RUNNABLE`、内核栈为 `bootstack`、父进程和 `mm` 为空；`initproc` 的 pid 为 1、父进程为 `idleproc`、状态为 `PROC_RUNNABLE`、具有独立内核栈和经过初始化的首次运行现场。
+
+**Case 1：分配 PCB**。`alloc_proc()` 必须返回安全初始化的 PCB，或内存不足时返回 `NULL`。初始状态为 `PROC_UNINIT`，pid 为 -1，`runs`、标志和名称等字段为 0/NULL，`pgdir` 为内核页表物理地址。
+
+**Case 2：初始化 idleproc**。`proc_init()` 先建立全局结构，再分配并登记 `idleproc`；`current` 指向 `idleproc`。该线程不需要新建内核栈。
+
+**Case 3：创建 initproc**。`kernel_thread(init_main, "Hello world!!", 0)` 返回正 pid。新线程拥有 `KSTACKPAGE` 个连续页的内核栈，其 trapframe 位于栈顶，`context.ra=forkret`，`context.sp` 指向 trapframe。
+
+**Case 4：构造首次运行现场**。模板 trapframe 清零后设置 `s0` 为目标函数、`s1` 为参数、`epc` 为 `kernel_thread_entry`；`sstatus` 显式进入 Supervisor 模式并保留中断使能模板，同时暂时关闭 S 模式中断。
+
+**Case 5：登记新线程**。pid 分配、哈希表插入、进程链表插入和 `nr_process` 增加应处于同一中断保护区间，之后 `wakeup_proc()` 新线程。成功后 `do_fork()` 返回子线程 pid。
+
+**Case 6：失败清理**。PCB 分配失败时不泄漏资源；内核栈分配失败时释放 PCB；后续初始化失败时先释放内核栈，再释放 PCB。进程总数达到 `MAX_PROCESS` 时返回 `-E_NO_FREE_PROC`。
+
+**Case 7：本阶段地址空间语义**。`copy_mm()` 只服务于内核线程，要求 `current->mm == NULL`，并使新线程的 `mm` 为空。用户地址空间复制留给后续实验。
+
+**Requirements**：至少验证进程对象创建、`idleproc/initproc` 字段、pid、链表/哈希登记、内核栈与 trapframe 地址、模块二目标文件编译，以及模块三接入后的首次线程启动。不得把模块二编译通过等同于整组 `make grade` 已通过。
+
