@@ -134,3 +134,46 @@ static int copy_mm(uint32_t clone_flags, struct proc_struct *proc);
 
 **Requirements**：至少验证进程对象创建、`idleproc/initproc` 字段、pid、链表/哈希登记、内核栈与 trapframe 地址、模块二目标文件编译，以及模块三接入后的首次线程启动。不得把模块二编译通过等同于整组 `make grade` 已通过。
 
+## 邓耀飞：调度与上下文切换
+
+[PROMPT]
+
+在现有 Lab4 工程中实现模块三，完成 `cpu_idle()`、`schedule()`、`proc_run()` 和 `switch_to()`。直接修改实际文件，保留其他成员完成的页映射与进程创建逻辑，将模块三标记中的 YOUR CODE 替换为 2413404。完成后内核线程应能够首次启动并在多次主动调度后恢复执行。
+
+[RELY]
+
+- `proc_list` 登记线程，`current` 为当前线程，`idleproc` 为空闲线程；`PROC_RUNNABLE` 表示可运行，`need_resched` 表示需要重调度，`runs` 记录被调度次数。
+- `struct context` 按顺序包含 `ra`、`sp`、`s0` 至 `s11`，每项在 RV64 下占 8 字节；RISC-V 调用约定允许普通函数调用破坏临时和参数寄存器。
+- `local_intr_save()` 保存 SIE 并关闭本核中断，`local_intr_restore()` 按原状态恢复；嵌套调用必须各用独立局部变量。
+- `proc->pgdir` 是页表根物理地址；Sv39 satp 的 MODE 为 8，位于高四位，PPN 为物理地址右移 12 位。`lsatp()` 是 Sv32 遗留接口，不适用于本任务。
+- 新线程已有 `context.ra=forkret`、`context.sp=tf`，首次运行沿 `forkret -> forkrets -> __trapret -> kernel_thread_entry` 进入目标函数。
+- 可用 `list_next()`、`le2proc()`、`write_csr()`、`flush_tlb()` 和现有进程接口。
+
+[GUARANTEE]
+
+```c
+void cpu_idle(void);
+void schedule(void);
+void proc_run(struct proc_struct *proc);
+void switch_to(struct context *from, struct context *to);
+```
+
+保持公开接口和数据布局不变；不扩展进程退出回收或用户地址空间复制。
+
+[SPECIFICATION]
+
+**Pre-Condition**：进程链表、当前线程和空闲线程已经初始化；线程具有合法内核栈与页表，目标 context 已保存或构造完毕。
+
+**Post-Condition**：一次调度选出可运行线程并统计运行次数；发生切换时 `current`、satp 和实际寄存器现场一致；原线程再次被调度后能够从原调用点继续执行。
+
+**Case 1：空闲循环**。`cpu_idle()` 持续检测 `need_resched`，需要调度时调用 `schedule()`，不返回初始化函数。
+
+**Case 2：选择线程**。清除当前调度标记，从当前线程之后按链表顺序循环寻找非 idle 的 runnable 线程；从 idle 出发时由链表头开始。跳过表头、阻塞线程和 idle，遍历无结果时使用 idle。
+
+**Case 3：无须切换**。选中当前线程时只增加运行次数，不切换寄存器或页表；空表及没有其他 runnable 线程时必须终止查找。
+
+**Case 4：切换执行现场**。在中断保护区内更新 `current`，写入合法的 Sv39 satp 并刷新 TLB，再通过 `switch_to()` 保存旧 context、恢复新 context。每个线程返回自己的调用栈后恢复其保存的中断状态。
+
+**Case 5：首次启动与再次恢复**。新线程返回到预设的 `forkret`，已有线程返回到上次 `switch_to()` 调用之后。汇编必须按真实 context 偏移保存和恢复全部 14 项，不能用 Trap frame 的偏移。
+
+**Requirements**：实现线程选择、页表切换和寄存器切换的职责划分；保护切换临界区；运行完整构建、普通启动与原有评分。工具链兼容修正不得删除断言、降低分值或伪造 PASS；报告只记录真实结果。

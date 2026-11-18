@@ -150,6 +150,8 @@ run_qemu() {
         brkaddr=`$grep " $brkfun\$" $sym_table | $sed -e's/ .*$//g'`
         brkaddr_phys=`echo $brkaddr | sed "s/^c0/00/g"`
         (
+            echo "file bin/kernel"
+            echo "set architecture riscv:rv64"
             echo "target remote localhost:$gdbport"
             echo "break *0x$brkaddr"
             if [ "$brkaddr" != "$brkaddr_phys" ]; then

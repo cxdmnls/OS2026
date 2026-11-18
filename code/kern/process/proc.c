@@ -382,4 +382,29 @@ proc_init(void)
 }
 
 
-//LAB4 function3 YOUR CODE
+//LAB4 function3 2413404
+void
+cpu_idle(void) {
+    for (;;) {
+        if (current->need_resched) {
+            schedule();
+        }
+    }
+}
+
+void
+proc_run(struct proc_struct *proc) {
+    if (proc != current) {
+        bool intr_flag;
+        local_intr_save(intr_flag);
+        struct proc_struct *prev = current;
+        current = proc;
+        /* pgdir is a physical address; Sv39 MODE occupies bits 63:60. */
+        write_csr(satp, ((uintptr_t)SATP_MODE_SV39 << 60) |
+                       (proc->pgdir >> RISCV_PGSHIFT));
+        flush_tlb();
+        switch_to(&prev->context, &proc->context);
+        /* Resumes on this thread's own stack when it is scheduled again. */
+        local_intr_restore(intr_flag);
+    }
+}

@@ -6,7 +6,7 @@
 |------|------|
 | **实验名称** | Lab4：进程管理 |
 | **小组成员** | 2413603-常侯鑫、2411834-张岩、2413404-邓耀飞 |
-| **完成日期** | 2026-11-13 |
+| **完成日期** | 2026-11-18 |
 
 ### 小组分工
 
@@ -34,7 +34,7 @@
 | 2411834-张岩 | Codex | DeepSeek V4 Flash | 进程创建与初始化模块 |
 | 2413404-邓耀飞 | Codex | GPT-6 | 调度与上下文切换模块、中断保存与恢复思考题、集成验证 |
 
-采用 WSL Ubuntu 24.04、GNU Make 与 RISC-V 交叉编译工具。目标文件检查使用系统 GCC 13.2.0；模块动态验证启用已有课程工具环境，使用 QEMU 4.1.1 和 OpenSBI v0.4。最终集成应保持工具配置一致。
+采用 WSL Ubuntu 24.04、GNU Make 与 RISC-V 交叉编译工具。目标文件检查使用系统 GCC 13.2.0；模块动态验证启用已有课程工具环境，使用 QEMU 4.1.1 和 OpenSBI v0.4。最终集成使用 WSL、GCC 14.2.0、QEMU 4.1.1、OpenSBI v0.4 和 gdb-multiarch。
 
 ---
 
@@ -156,15 +156,25 @@ schedule
 
 #### 模块功能描述
 
-需要实现 cpu_idle、schedule、proc_run、switch_to；页表切换采用 Sv39 satp 格式。
+`cpu_idle()` 检查 `need_resched` 并触发调度；`schedule()` 关闭中断并清除调度标记，从当前线程之后循环查找非 idle 的 `PROC_RUNNABLE` 线程，跳过链表头和不可运行线程，没有候选时使用 idle。idle 即使登记在链表中也只作为保底选项，不能抢在真实可运行线程前面。选中后增加 `runs`，仅在目标不同于 current 时调用 `proc_run()`。
+
+`proc_run()` 在中断保护区内更新 `current`，将 `(SATP_MODE_SV39 << 60) | (proc->pgdir >> RISCV_PGSHIFT)` 写入 satp，刷新 TLB，然后调用 `switch_to()`。这里的 pgdir 是物理地址，不能使用 Sv32 的 `lsatp()`。
+
+`switch_to()` 按 `struct context` 布局保存和恢复 `ra`、`sp`、`s0` 至 `s11`，共 14 个 64 位字段。`a0` 和 `a1` 分别指向旧、新 context，最后 `ret` 跳到新 context.ra。由于这是正常函数调用边界，调用者负责临时寄存器和参数寄存器，不需要像 Trap 入口一样保存全部通用寄存器。
+
+新线程的 ra 预设为 forkret，因此第一次切换沿 `forkret -> forkrets -> __trapret -> sret -> kernel_thread_entry -> fn(arg)` 执行；旧线程再次被选中时，恢复自己的栈，继续执行上次 switch_to 后的中断状态恢复。
 
 #### 最终提示词
 
-由负责人在实际实现时记录。
+四段式提示词见 `prompt.md` 的“邓耀飞：调度与上下文切换”，依赖项明确 context 偏移、Sv39 satp 和首次启动链路；规格覆盖正常选择、空闲保底、无需切换及重复恢复。
 
 #### 实现迭代过程
 
-该模块尚未开展实现与动态验证。
+四个接口实现后，全量构建通过，普通启动成功进入 initproc。正式评分前依次处理四项兼容问题：`kmalloc.c` 将传给 `kva2page` 的整数地址显式转为 `void *`；测试线程返回类型由 void 改为与 `kernel_thread` 一致的 int，并补充不可达 return；通过 `.gitattributes` 固定 Shell 脚本为 LF；GDB 缺少交叉版本时回退到 gdb-multiarch，并在评分连接 QEMU 前加载 bin/kernel、指定 riscv:rv64。
+
+最初评分出现空串口输出，调试发现 gdb-multiarch 报 `Truncated register 37 in remote 'g' packet`，内核并未获准继续执行。显式指定架构后，原有三组评分均通过。未改变测试断言、评分分值或调度压力；测试线程仍多次主动让出 CPU。
+
+本实验框架 `do_exit()` 仍调用 panic。initproc 输出结束后进入调试监控器属于该占位行为，不能描述成已实现线程退出回收。
 
 ---
 
@@ -196,7 +206,11 @@ Sv39 的有效虚拟地址按 `VPN[2]、VPN[1]、VPN[0]、12 位页内偏移` �
 
 **负责人：** 2413404-邓耀飞
 
-由负责人结合 `kern/sync/sync.h` 的 `__intr_save`、`__intr_restore` 与 `sstatus.SIE` 完成解释，说明恢复原状态与无条件开中断的区别，以及嵌套临界区和单核中断保护的适用范围。
+`local_intr_save(intr_flag)` 调用 `__intr_save()`：读取 `sstatus.SIE`，若为 1 则关闭中断并返回 1，否则返回 0。结束时 `local_intr_restore(intr_flag)` 仅在保存值为 1 时重新打开中断。因此进入前关闭的中断不会被错误打开。
+
+嵌套时外层保存 1 并关中断，内层看到关闭状态而保存 0；内层退出保持关闭，外层退出才重新打开。每层必须保存到独立局部变量，不能共用同一个 flag。本实现的 schedule 与 proc_run 正是这种嵌套关系；切回旧线程后才恢复旧栈上保存的状态。
+
+`do { ... } while (0)` 将宏封装成单条语句，只执行一次，保证用于 if/else 时语法完整。中断屏蔽只阻止本核可屏蔽中断造成的并发，不屏蔽同步异常，也不能阻止其他 CPU 修改共享数据；多核仍需锁和内存序机制。切换到新线程后的中断状态由其 Trap frame 和 sret 恢复，不能依赖尚未执行的旧线程恢复语句。
 
 ---
 
@@ -224,11 +238,11 @@ make -j2 obj/kern/mm/pmm.o obj/kern/mm/default_pmm.o obj/kern/trap/trap.o obj/ke
 | 框架 `[Test PMM] PASS` | 通过 |
 | 无空闲页时插入返回 `-E_NO_MEM` | 通过 |
 | 仅剩一页、中间目录分配后失败的回滚 | 通过，目录项清零、目标引用不变、空闲页数量恢复 |
-| 全组完整评分 | 尚未执行 |
+| 全组完整评分 | 后续模块三集成后已执行，30/30 |
 
-分配失败检查仅在临时副本中运行，没有向仓库加入自编测试脚本。系统默认的较新 OpenSBI 环境未成功进入内核；启用课程环境后模块验证通过，因此最终集成需先确认使用课程工具。
+分配失败检查仅在临时副本中运行，没有向仓库加入自编测试脚本。该阶段记录的是模块一的中间进度；最终整组评分在模块三接入后完成，结果见最终集成部分。
 
-模块二于 2026-11-13 先执行：
+模块二于 2026-11-18 先执行：
 
 ```bash
 make -B obj/kern/process/proc.o
@@ -256,9 +270,38 @@ To U: "en.., Bye, Bye. :)".
 | pid 分配、哈希桶和进程链表登记 | 通过 |
 | `initproc` 经首次运行链输出三行文本 | 通过 |
 | 两个附加内核线程均可运行和切换 | 通过 |
-| 整组 `make grade` | 待模块三正式实现后执行 |
+| 整组 `make grade` | 2026-11-18 正式集成通过，30/30 |
 
-临时集成发现当前 WSL 的 GCC 14 对框架 `tools/test_lab4.c` 中 `void (*)(void *)` 与 `kernel_thread` 的 `int (*)(void *)` 参数执行严格类型检查，原有评分注入测试不能直接编译；同一工具链还会拒绝 `kern/mm/kmalloc.c` 中缺少 `void *` 强制转换的旧写法。为验证模块二，只在临时副本中做了兼容调整，没有修改仓库评分工具或测试标准。正式集成时应统一课程工具链或由模块三负责人处理这些框架兼容问题。
+临时集成发现当前 WSL 的 GCC 14 将框架测试线程的 `void (*)(void *)` 与 `kernel_thread` 的 `int (*)(void *)` 参数视为错误；仅为适配测试调用约定，将注入测试线程的返回类型改为 `int` 并补充不可达返回，测试断言和评分标准不变。同一工具链还拒绝 `kern/mm/kmalloc.c` 中缺少 `void *` 强制转换的旧写法，已补充显式转换。正式评分还要求 GDB 先载入内核并指定 `riscv:rv64`，已在评分生成的临时 GDB 脚本中补齐。
+
+---
+
+### 最终集成与课堂演示
+
+2026-11-18 在当前正式代码执行以下命令：
+
+```bash
+cd /mnt/d/Desktop/CODE/os/OS2026/code
+export PATH=/opt/qemu-4.1.1/bin:$PATH
+qemu-system-riscv64 --version
+make clean
+make -j2
+make qemu
+make grade
+```
+
+| 项目 | 实际结果 |
+|---|---|
+| 全量构建 | 通过 |
+| 普通启动 | 页表、物理内存、VMM 自检通过，initproc 输出 Hello world |
+| PMM | 10/10 |
+| Process Create | 10/10 |
+| Schedule | 10/10，两个测试线程多次主动调度后返回验证点 |
+| 总分 | **30/30** |
+
+评分自动在 `/tmp/lab4_grade` 的源码副本注入测试，GDB 在进入监控器的 readline 处停止，随后检查串口结果。评分不会把测试插入正式源码。普通启动结束出现 `process exit!!` 是框架 do_exit 占位，不表示正常退出已实现。评分通过验证共享内核页表下的线程切换，没有证明独立用户地址空间、多核调度或完整退出回收。
+
+演示时先确认 QEMU 4.1.1；需要展示完整流程时执行构建、普通启动与评分，只检查结果时执行 make grade。讲解时沿 cpu_idle、schedule、proc_run、switch_to 和首次启动链路定位代码，说明 context 与 trapframe 的区别及嵌套中断保护。
 
 ---
 
