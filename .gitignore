@@ -1,0 +1,14 @@
+/code/obj/
+/code/bin/
+/code/.gdb.in
+/code/.qemu.out
+/code/.*.log
+/code/.idea/
+/code/cmake-build-*/
+/report/logs/
+/.stage1_verify.py
+/code/tools/inject.py
+/code/tools/test_lab5.c
+/code/tools/test_lab5.h
+/code/tools/grade.sh
+__pycache__/
